@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const MapGenerator = require('./utils/mapGenerator'); // ← 맨 위에!
 require('dotenv').config();
 
 const app = express();
@@ -53,14 +54,19 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 방 생성
+  // 방 생성 (맵 생성 포함)
   socket.on('create-room', (roomId) => {
     console.log(`🏠 방 생성: ${roomId}`);
     
     if (!gameRooms.has(roomId)) {
+      // 맵 생성
+      const mapGenerator = new MapGenerator(50, 50);
+      const gameMap = mapGenerator.generateMap();
+      
       const newRoom = {
         roomId: roomId,
         players: [],
+        map: gameMap,  // ← 맵 추가!
         createdAt: new Date().toISOString()
       };
       
@@ -71,6 +77,8 @@ io.on('connection', (socket) => {
         success: true,
         room: newRoom
       });
+      
+      console.log(`✅ 방 생성 완료: ${roomId} (맵 크기: ${gameMap.width}x${gameMap.height})`);
     } else {
       socket.emit('room-error', {
         message: '이미 존재하는 방입니다.'
@@ -112,6 +120,64 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 플레이어 이동
+  socket.on('move-player', (direction) => {
+    console.log(`🚶 플레이어 이동: ${socket.id} → ${direction}`);
+    
+    const player = players.get(socket.id);
+    if (!player) return;
+    
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+    
+    // 새 위치 계산
+    const newPosition = calculateNewPosition(player.position, direction);
+    
+    // 맵 경계 체크
+    if (isValidPosition(newPosition, room.map)) {
+      // 플레이어 위치 업데이트
+      player.position = newPosition;
+      
+      // 방의 플레이어 정보도 업데이트
+      const roomPlayer = room.players.find(p => p.playerId === socket.id);
+      if (roomPlayer) {
+        roomPlayer.position = newPosition;
+      }
+      
+      // 방의 모든 플레이어에게 이동 알림
+      io.to(player.roomId).emit('player-moved', {
+        playerId: socket.id,
+        position: newPosition,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      // 잘못된 이동 시 에러 전송
+      socket.emit('move-error', {
+        message: '이동할 수 없는 위치입니다.',
+        currentPosition: player.position
+      });
+    }
+  });
+
+  // 맵 정보 요청
+  socket.on('request-map', () => {
+    const player = players.get(socket.id);
+    if (!player) return;
+    
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+    
+    socket.emit('map-data', {
+      map: room.map,
+      playerPosition: player.position,
+      allPlayers: room.players.map(p => ({
+        playerId: p.playerId,
+        username: p.username,
+        position: p.position
+      }))
+    });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     console.log(`👋 플레이어 연결 해제: ${socket.id}`);
@@ -140,7 +206,31 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+// 유틸 함수들 (io.on() 밖에!)
+function calculateNewPosition(currentPos, direction) {
+  const { x, y } = currentPos;
+  
+  switch (direction) {
+    case 'up': return { x, y: y - 1 };
+    case 'down': return { x, y: y + 1 };
+    case 'left': return { x: x - 1, y };
+    case 'right': return { x: x + 1, y };
+    default: return currentPos;
+  }
+}
+
+function isValidPosition(position, map) {
+  const { x, y } = position;
+  
+  // 맵 경계 체크
+  if (x < 0 || x >= map.width || y < 0 || y >= map.height) {
+    return false;
+  }
+  
+  return true; // 일단 모든 위치 이동 가능
+}
+
+const PORT = process.env.PORT || 5001; // ← 5001로!
 server.listen(PORT, () => {
   console.log('🚀 ================================');
   console.log(`🎮 Minecraft Game Server Started!`);
