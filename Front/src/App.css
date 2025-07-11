@@ -25,20 +25,21 @@ css
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  padding: 0;
+}
+
+.game-map-wrapper {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: #34495E;
+  border: none;
 }
 
 .game-map {
-  display: grid;
-  grid-template-columns: repeat(50, 12px);
-  grid-template-rows: repeat(50, 12px);
-  gap: 1px;
-  background: #34495E;
-  border: 4px solid #2C3E50;
-  border-radius: 8px;
-  max-width: 90vw;
-  max-height: 70vh;
-  overflow: hidden;
+  position: relative;
 }
 
 .map-cell {
@@ -53,41 +54,46 @@ css
   border: 1px solid rgba(255,255,255,0.1);
 }
 
-.map-cell.grass { background: #27AE60; }
-.map-cell.tree { background: #229954; }
-.map-cell.stone { background: #85929E; }
-.map-cell.iron_ore { background: #E67E22; }
-.map-cell.coal { background: #34495E; }
+.map-cell.mining {
+  animation: shake 0.3s ease-in-out infinite;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(2px, 0); }
+}
 
 .map-cell:hover {
   border: 2px solid #F1C40F;
   z-index: 10;
 }
 
-.player {
+.player-icon {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 10px;
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+  font-size: 12px;
   z-index: 100;
+  pointer-events: none;
   text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
 }
 
 .current-player {
-  animation: pulse 2s infinite;
+  animation: pulse 1.5s infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); }
-  50% { transform: translate(-50%, -50%) scale(1.2); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
 }
 
 .inventory-bar {
   background: rgba(0,0,0,0.8);
-  padding: 15px;
+  padding: 15px 0;
   display: flex;
   justify-content: center;
+  border-top: 2px solid #555;
 }
 
 .hotbar {
