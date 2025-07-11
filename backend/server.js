@@ -97,7 +97,12 @@ io.on('connection', (socket) => {
         playerId: socket.id,
         username: `Player_${socket.id.slice(0, 4)}`,
         position: { x: 25, y: 25 },
-        inventory: { wood: 0, stone: 0, iron: 0, coal: 0 },
+        inventory: { 
+          wood: 0, 
+          stone: 0, 
+          iron: 0, 
+          diamond: 0  // 다이아몬드 추가
+        },
         joinedAt: new Date().toISOString()
       };
 
@@ -178,6 +183,58 @@ io.on('connection', (socket) => {
     });
   });
 
+  // 인벤토리 슬롯 변경
+  socket.on('change-hotbar-slot', (slotNumber) => {
+    console.log(`🎒 인벤토리 슬롯 변경: ${socket.id} → ${slotNumber}`);
+    
+    const player = players.get(socket.id);
+    if (!player || slotNumber < 0 || slotNumber > 4) return;
+    
+    player.selectedSlot = slotNumber;
+    
+    io.to(player.roomId).emit('player-hotbar-changed', {
+      playerId: socket.id,
+      selectedSlot: slotNumber
+    });
+  });
+
+  // 블록 채굴
+  socket.on('mine-block', (data) => {
+    console.log(`⛏️ 블록 채굴: ${socket.id} → (${data.x}, ${data.y})`);
+    
+    const player = players.get(socket.id);
+    if (!player) return;
+    
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+    
+    // 블록 정보 확인
+    const block = room.map.cells[data.y][data.x];
+    if (!block) return;
+    
+    // 자원 획득
+    const resource = getResourceFromBlock(block.type);
+    if (resource) {
+      player.inventory[resource] = (player.inventory[resource] || 0) + 1;
+      
+      // 블록을 잔디로 변경 (채굴 완료)
+      room.map.cells[data.y][data.x] = {
+        type: 'grass',
+        durability: 10,
+        resources: 0
+      };
+      
+      // 모든 플레이어에게 알림
+      io.to(player.roomId).emit('block-mined', {
+        x: data.x,
+        y: data.y,
+        playerId: socket.id,
+        resource: resource,
+        newInventory: player.inventory
+      });
+    }
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     console.log(`👋 플레이어 연결 해제: ${socket.id}`);
@@ -207,6 +264,16 @@ io.on('connection', (socket) => {
 });
 
 // 유틸 함수들 (io.on() 밖에!)
+function getResourceFromBlock(blockType) {
+  const resourceMap = {
+    tree: 'wood',
+    stone: 'stone', 
+    iron_ore: 'iron',
+    diamond: 'diamond'
+  };
+  return resourceMap[blockType];
+}
+
 function calculateNewPosition(currentPos, direction) {
   const { x, y } = currentPos;
   
@@ -230,7 +297,7 @@ function isValidPosition(position, map) {
   return true; // 일단 모든 위치 이동 가능
 }
 
-const PORT = process.env.PORT || 5001; // ← 5001로!
+const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log('🚀 ================================');
   console.log(`🎮 Minecraft Game Server Started!`);
