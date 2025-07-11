@@ -156,7 +156,7 @@ io.on('connection', (socket) => {
         message: '이동할 수 없는 위치입니다.',
         currentPosition: player.position
       });
-    }
+    }ƒ
   });
 
   // 맵 정보 요청
@@ -177,6 +177,21 @@ io.on('connection', (socket) => {
       }))
     });
   });
+
+  //인벤토리 슬롯 변경
+  socket.on('change-hotbar-slot', (slotNumber) => {
+  console.log(`🎒 인벤토리 슬롯 변경: ${socket.id} → ${slotNumber}`);
+  
+  const player = players.get(socket.id);
+  if (!player || slotNumber < 0 || slotNumber > 4) return;
+  
+  player.selectedSlot = slotNumber;
+  
+  io.to(player.roomId).emit('player-hotbar-changed', {
+    playerId: socket.id,
+    selectedSlot: slotNumber
+  });
+});
 
   // 연결 해제
   socket.on('disconnect', () => {
