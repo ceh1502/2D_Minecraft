@@ -1,3 +1,4 @@
+// 마인크래프트 스타일 맵 생성기
 class MapGenerator {
   constructor(width = 50, height = 50) {
     this.width = width;
@@ -23,48 +24,47 @@ class MapGenerator {
   }
 
   generateCell(x, y) {
-    // 맵 생성 로직
     const random = Math.random();
     
-    // 가장자리는 산/돌
+    // 가장자리는 무조건 돌 (경계 역할)
     if (x === 0 || x === this.width - 1 || y === 0 || y === this.height - 1) {
       return {
         type: 'stone',
         durability: 100,
-        resources: Math.floor(Math.random() * 5) + 3
+        resources: 3
       };
     }
     
-    // 자원 분포
-    if (random < 0.25) {
+    // 새로운 자원 분포 비율
+    if (random < 0.65) {        // 65% 잔디
+      return {
+        type: 'grass',
+        durability: 10,
+        resources: 0
+      };
+    } else if (random < 0.75) { // 10% 나무 (65% + 10% = 75%)
       return {
         type: 'tree',
         durability: 50,
         resources: Math.floor(Math.random() * 3) + 2
       };
-    } else if (random < 0.4) {
+    } else if (random < 0.90) { // 15% 돌 (75% + 15% = 90%)
       return {
         type: 'stone',
         durability: 80,
-        resources: Math.floor(Math.random() * 4) + 2
+        resources: Math.floor(Math.random() * 3) + 2
       };
-    } else if (random < 0.5) {
+    } else if (random < 0.97) { // 7% 철광석 (90% + 7% = 97%)
       return {
         type: 'iron_ore',
         durability: 120,
         resources: Math.floor(Math.random() * 2) + 1
       };
-    } else if (random < 0.55) {
+    } else {                    // 3% 다이아몬드 (97% + 3% = 100%)
       return {
-        type: 'coal',
-        durability: 60,
-        resources: Math.floor(Math.random() * 3) + 1
-      };
-    } else {
-      return {
-        type: 'grass',
-        durability: 10,
-        resources: 0
+        type: 'diamond',
+        durability: 150,
+        resources: 1
       };
     }
   }

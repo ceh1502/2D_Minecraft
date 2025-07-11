@@ -223,7 +223,7 @@ function getCellIcon(type) {
     tree: '🌳',
     stone: '⛰️',
     iron_ore: '⚒️',
-    coal: '⚫'
+    diamond:'💎'
   };
   return icons[type] || '';
 }
