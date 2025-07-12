@@ -61,25 +61,21 @@ body {
 .map-cell {
   position: absolute;
   cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.1);
 }
 
-.map-cell:hover {
-  border: 2px solid #F1C40F;
-  z-index: 10;
-}
 
 /* 플레이어 */
 .player-icon {
   position: absolute;
   z-index: 100;
   pointer-events: none;
-  transition: all 0.2s ease-out;
+  transition: all 0.1s ease-out;
 }
 
 .current-player {
   z-index: 110;
   filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+  transition: all 0.05s ease-out;
   animation: playerGlow 2s infinite alternate;
 }
 

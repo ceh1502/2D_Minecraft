@@ -139,11 +139,12 @@ function App() {
             ? { ...p, position: data.position }
             : p
         );
-    
+
+        // 현재 플레이어는 서버 위치로 보정 (약간의 보정만)
         const updatedCurrent = prev.currentPlayer?.playerId === data.playerId
           ? { ...prev.currentPlayer, position: data.position }
           : prev.currentPlayer;
-    
+
         return {
           ...prev,
           players: updatedPlayers,
@@ -202,75 +203,92 @@ function App() {
   }, []);
 
   // 키보드 컨트롤(이동, 인벤토리, 채굴)
-  useEffect(() => {
-    const handleKeyPress = (e) => {
-      if (!socket || !connected) return;
-      const key = e.key.toLowerCase();
+  // 키보드 컨트롤(이동, 인벤토리, 채굴)
+useEffect(() => {
+  const pressedKeys = new Set(); // 눌린 키 추적
 
-      const moveMap = {
-        w: 'up',
-        a: 'left',
-        s: 'down',
-        d: 'right',
-      };
+  const handleKeyDown = (e) => {
+    if (!socket || !connected) return;
+    if (pressedKeys.has(e.key.toLowerCase())) return; // 이미 눌린 키 무시
+    
+    const key = e.key.toLowerCase();
+    pressedKeys.add(key);
 
-      if (moveMap[key]) {
-        const direction = moveMap[key];
+    const moveMap = {
+      w: 'up',
+      a: 'left', 
+      s: 'down',
+      d: 'right',
+    };
 
-        setGameState(prev => ({ ...prev, direction }));
-
-        const { currentPlayer, mapData } = gameStateRef.current;
-        if (!currentPlayer || !mapData) return;
-
-        let { x, y } = currentPlayer.position;
-        if (direction === 'up') y--;
-        else if (direction === 'down') y++;
-        else if (direction === 'left') x--;
-        else if (direction === 'right') x++;
-
-        // 이동 범위 검사
-        if (x < 0 || x >= mapData.width || y < 0 || y >= mapData.height) return;
-
-        const targetCell = mapData.cells[y][x];
-        if (targetCell.type !== 'grass') {
-          console.log('🚫 이 블록은 지나갈 수 없어!');
-          return; // ❌ 이동 중단
-        }
-
-  // ✅ 이동 허용
-  setGameState(prev => ({ ...prev, direction }));
-  socket.emit('move-player', direction);
-}
-
-      // 인벤토리 열기/닫기 (E키)
-      if (key === 'e') {
-        setGameState(prev => ({
+    if (moveMap[key]) {
+      // 1. 즉시 로컬 상태 업데이트 (딜레이 없음)
+      setGameState(prev => {
+        if (!prev.currentPlayer) return prev;
+        
+        const newPosition = calculateNewPosition(prev.currentPlayer.position, moveMap[key]);
+        
+        return {
           ...prev,
-          isInventoryOpen: !prev.isInventoryOpen
-        }));
-      }
+          direction: moveMap[key],
+          currentPlayer: {
+            ...prev.currentPlayer,
+            position: newPosition
+          }
+        };
+      });
+      
+      // 2. 서버에 이동 요청 (백그라운드)
+      socket.emit('move-player', moveMap[key]);
+    }
 
-      // 인벤토리 슬롯 선택 1~5
-      const slotKeys = ['1', '2', '3', '4', '5'];
-      const slotIndex = slotKeys.indexOf(e.key);
-      if (slotIndex !== -1) {
-        setGameState(prev => ({ ...prev, selectedSlot: slotIndex }));
-        socket.emit('change-hotbar-slot', slotIndex);
-      }
+    // 인벤토리 슬롯 선택 1~5
+    const slotKeys = ['1', '2', '3', '4', '5'];
+    const slotIndex = slotKeys.indexOf(e.key);
+    if (slotIndex !== -1) {
+      setGameState(prev => ({ ...prev, selectedSlot: slotIndex }));
+      socket.emit('change-hotbar-slot', slotIndex);
+    }
 
-      // J키 누르면 앞 블록 채굴 시도
-      if (key === 'j') {
-        tryMineBlock();
-      }
-    };
+    // 인벤토리 열기/닫기 (E키)
+    if (key === 'e') {
+      setGameState(prev => ({
+        ...prev,
+        isInventoryOpen: !prev.isInventoryOpen
+      }));
+    }
 
-    window.addEventListener('keydown', handleKeyPress);
+    // J키 누르면 앞 블록 채굴 시도
+    if (key === 'j') {
+      tryMineBlock();
+    }
+  };
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [socket, connected]);
+  const handleKeyUp = (e) => {
+    pressedKeys.delete(e.key.toLowerCase());
+  };
 
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+  };
+}, [socket, connected]);
+
+// 위치 계산 헬퍼 함수 추가
+const calculateNewPosition = (currentPos, direction) => {
+  const { x, y } = currentPos;
+  
+  switch (direction) {
+    case 'up': return { x, y: Math.max(1, y - 1) };
+    case 'down': return { x, y: Math.min(48, y + 1) };
+    case 'left': return { x: Math.max(1, x - 1), y };
+    case 'right': return { x: Math.min(48, x + 1), y };
+    default: return currentPos;
+  }
+};
   if (!connected) {
     return (
       <div className="loading-screen">
