@@ -4,7 +4,7 @@ css
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #87CEEB;
+  background: #BFBFBF;
   font-family: 'Courier New', monospace;
   overflow: hidden;
 }
@@ -15,7 +15,7 @@ css
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: #2C3E50;
+  background: #A0A0A0;
   color: white;
   font-size: 18px;
 }
@@ -34,7 +34,7 @@ css
   height: 100%;
   overflow: hidden;
   position: relative;
-  background: #34495E;
+  background: #c0c0c0;
   border: none;
 }
 
@@ -89,11 +89,11 @@ css
 }
 
 .inventory-bar {
-  background: rgba(0,0,0,0.8);
+  background: #999;
   padding: 15px 0;
   display: flex;
   justify-content: center;
-  border-top: 2px solid #555;
+  border-top: 2px solid #888;
 }
 
 .hotbar {
@@ -104,9 +104,9 @@ css
 .hotbar-slot {
   width: 60px;
   height: 60px;
-  background: #2C3E50;
-  border: 3px solid #34495E;
-  border-radius: 8px;
+  background: #D3D3D3;
+  border: 2px solid #AAA;
+  border-radius: 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -116,10 +116,9 @@ css
 }
 
 .hotbar-slot.selected {
-  border-color: #F1C40F;
-  background: #34495E;
-  transform: scale(1.1);
-  box-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
+  border-color: #FFD700;
+  background: #ECECEC;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.7);
 }
 
 .slot-number {
@@ -142,6 +141,96 @@ css
   text-align: center;
 }
 
+.inventory-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.inventory-modal {
+  background: #BFBFBF;
+  padding: 20px;
+  border: 4px solid #888;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  color: black;
+}
+
+.inventory-layout {
+  display: flex;
+  gap: 24px;
+}
+.player-avatar {
+  background: #444;
+  width: 100px;
+  height: 150px;
+  border: 2px inset #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-box {
+  font-size: 48px;
+}
+
+.inventory-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inventory-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inventory-row {
+  display: flex;
+  gap: 6px;
+}
+
+.inventory-slot {
+  width: 48px;
+  height: 48px;
+  background: #DDD;
+  border: 2px solid #AAA;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.15s ease;
+}
+
+.inventory-slot.selected {
+  border-color: #FFD700;
+  background: #EEE;
+  box-shadow: 0 0 5px rgba(255, 215, 0, 0.6);
+  transform: scale(1.05);
+}
+
+
+.slot-icon {
+  font-size: 20px;
+}
+
+.slot-count {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 11px;
+  color: #ECF0F1;
+}
 .controls-guide {
   position: absolute;
   top: 10px;

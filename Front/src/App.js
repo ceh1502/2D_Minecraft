@@ -1,15 +1,25 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
 // 아이템 타입별 이모지 아이콘 반환 헬퍼 함수
 const getIconForItem = (type) => {
   switch (type) {
-    case 'wood': return '🪵';
-    case 'stone': return '🪨';
-    case 'iron': return '⛓️';
-    case 'diamond': return '💎';
+    case 'wood': return '/images/blocks/tree.png';
+    case 'stone': return '/images/blocks/stone.png';
+    case 'iron': return '/images/blocks/iron.png';
+    case 'diamond': return '/images/blocks/dia.png';
     default: return '❓';
+  }
+};
+
+const getPlayerImage = (direction) => {
+  switch (direction) {
+    case 'up': return '/images/characters/avatar_up.png';
+    case 'down': return '/images/characters/avatar_down.png';
+    case 'left': return '/images/characters/avatar_left.png';
+    case 'right': return '/images/characters/avatar_right.png';
+    default: return '/images/characters/avatar_down.png';
   }
 };
 
@@ -22,52 +32,46 @@ function App() {
     currentPlayer: null,
     selectedSlot: 0,
     direction: 'down',
-    inventory: [],
+    inventory: new Array(20).fill(null), 
     isInventoryOpen: false
   });
 
+  const gameStateRef = useRef(gameState);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   const tryMineBlock = useCallback(() => {
-    console.log('[🧪 디버깅]', {
-      connected,
-      socketId: socket?.id,
-      currentPlayer: gameState.currentPlayer,
-      mapData: gameState.mapData
-    });
-    
-    if (!socket || !connected) {
-      console.warn('[🚫 채굴 요청 실패] socket 없음 or 연결 안 됨');
+    if (!socket || !connected) return;
+  
+    const player = gameStateRef.current.currentPlayer;
+    const mapData = gameStateRef.current.mapData;
+    const direction = gameStateRef.current.direction;
+  
+    if (!player || !mapData) {
+      console.warn('❌ currentPlayer or mapData is missing!');
       return;
     }
-
-    const player = gameState.currentPlayer;
-    if (!player || !gameState.mapData) {
-      console.warn('[🚫 채굴 요청 실패] 플레이어 또는 맵 없음');
-      return;
-    }
-
+  
     let targetX = player.position.x;
     let targetY = player.position.y;
-
-    switch (gameState.direction) {
+  
+    switch (direction) {
       case 'up': targetY -= 1; break;
       case 'down': targetY += 1; break;
       case 'left': targetX -= 1; break;
       case 'right': targetX += 1; break;
-      default: break;
     }
-
+  
     if (
-      targetX < 0 || targetX >= gameState.mapData.width ||
-      targetY < 0 || targetY >= gameState.mapData.height
+      targetX < 0 || targetX >= mapData.width ||
+      targetY < 0 || targetY >= mapData.height
     ) {
-      console.warn('[🚫 채굴 요청 실패] 범위 밖');
       return;
     }
-
-    console.log('[📤 클라이언트] 채굴 요청 emit →', targetX, targetY);
+  
     socket.emit('mine-block', { x: targetX, y: targetY });
-  }, [socket, connected, gameState]);
-
+  }, [socket, connected]);
 
   // 게임 초기화
   useEffect(() => {
@@ -151,14 +155,16 @@ function App() {
     
         // 인벤토리 배열 변환 함수
         const convertInventoryToArray = (inventoryObj) => {
-          const resourceList = ['wood', 'stone', 'iron', 'diamond'];
-          return resourceList
-            .filter(type => inventoryObj[type] > 0)
-            .map(type => ({
-              name: type,
-              count: inventoryObj[type],
-              icon: getIconForItem(type)
-            }));
+          const types = ['wood', 'stone', 'iron', 'diamond'];
+          const flat = new Array(20).fill(null);
+          let i = 0;
+          types.forEach(type => {
+            const count = inventoryObj[type];
+            if (count > 0 && i < 20) {
+              flat[i++] = { name: type, count, icon: getIconForItem(type) };
+            }
+          });
+          return flat;
         };
     
         const updatedCurrentPlayer =
@@ -171,11 +177,10 @@ function App() {
     
         return {
           ...prev,
-          mapData: {
-            ...prev.mapData,
-            cells: newCells
-          },
-          currentPlayer: updatedCurrentPlayer,
+          mapData: { ...prev.mapData, cells: newCells },
+          currentPlayer: playerId === prev.currentPlayer?.playerId
+            ? { ...prev.currentPlayer, inventory: newInventory }
+            : prev.currentPlayer,
           inventory: playerId === prev.currentPlayer?.playerId
             ? convertInventoryToArray(newInventory)
             : prev.inventory
@@ -206,7 +211,6 @@ function App() {
 
       // 인벤토리 열기/닫기 (E키)
       if (key === 'e') {
-
         setGameState(prev => ({
           ...prev,
           isInventoryOpen: !prev.isInventoryOpen
@@ -223,8 +227,6 @@ function App() {
 
       // J키 누르면 앞 블록 채굴 시도
       if (key === 'j') {
-        console.log('[👆 J 키 감지됨]');
-
         tryMineBlock();
       }
     };
@@ -267,6 +269,7 @@ function App() {
           mapData={gameState.mapData}
           players={gameState.players}
           currentPlayer={gameState.currentPlayer}
+          direction={gameState.direction}
         />
       </div>
 
@@ -295,8 +298,75 @@ function App() {
   );
 }
 
+function InventoryGrid({ inventory, selectedSlot, onSlotSelect }) {
+  const rows = 4, cols = 5;
+  return (
+    <div className="inventory-grid">
+      {Array.from({ length: rows }).map((_, rowIdx) => (
+        <div className="inventory-row" key={rowIdx}>
+          {Array.from({ length: cols }).map((_, colIdx) => {
+            const index = rowIdx * cols + colIdx;
+            const item = inventory[index];
+            const isHotbar = rowIdx === 3;
+            const isSelected = isHotbar && selectedSlot === colIdx;
+            return (
+              <div
+                key={index}
+                className={`inventory-slot ${isSelected ? 'selected' : ''}`}
+                onClick={() => isHotbar && onSlotSelect(colIdx)}
+              >
+                <div className="slot-icon">
+                  {item?.icon && (
+                    <img
+                      src={item.icon}
+                      alt={item.name}
+                      width={16}
+                      height={16}
+                    />
+                  )}
+                </div>
+                <div className="slot-count">{item?.count > 1 ? item.count : ''}</div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InventoryModal({ inventory, onClose }) {
+  return (
+    <div className="inventory-modal-backdrop" onClick={onClose}>
+      <div className="inventory-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="inventory-layout">
+          {/* 왼쪽: 플레이어 아바타 영역 */}
+          <div className="player-avatar">
+            <div className="avatar-box">
+              <img 
+                src="/images/characters/steve.gif"
+                alt="avatar"
+                height={108}
+              />
+            </div>
+          </div>
+
+          {/* 오른쪽: 인벤토리 */}
+          <div className="inventory-content">
+            <InventoryGrid
+              inventory={inventory}
+              selectedSlot={null}
+              onSlotSelect={() => {}}
+            />
+            <button onClick={onClose}>닫기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 // 게임 맵 컴포넌트
-function GameMap({ mapData, players, currentPlayer }) {
+function GameMap({ mapData, players, currentPlayer, direction }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [wrapperSize, setWrapperSize] = useState({
     width: window.innerWidth,
@@ -380,7 +450,12 @@ function GameMap({ mapData, players, currentPlayer }) {
             position: 'absolute'
           }}
         >
-          🧑‍🦲
+          <img
+            src={getPlayerImage(direction)}
+            alt="player"
+            width={tileSize}
+            height={tileSize}
+          />
         </div>
 
         {/* 다른 플레이어들 */}
@@ -405,7 +480,6 @@ function GameMap({ mapData, players, currentPlayer }) {
 
 // 인벤토리 바 컴포넌트
 function Hotbar({ selectedSlot, inventory }) {
-  // inventory 배열이 비어있으면 빈 슬롯 표시
   return (
     <div className="hotbar">
       {[0,1,2,3,4].map((i) => {
@@ -416,34 +490,20 @@ function Hotbar({ selectedSlot, inventory }) {
             className={`hotbar-slot ${selectedSlot === i ? 'selected' : ''}`}
           >
             <div className="slot-number">{i + 1}</div>
-            <div className="slot-icon">{item?.icon || ''}</div>
+            <div className="slot-icon">
+              {item?.icon && (
+                <img
+                  src={item.icon}
+                  alt={item.name}
+                  width={16}
+                  height={16}
+                />
+              )}
+            </div>
             <div className="slot-name">{item?.name || ''}</div>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// 인벤토리 모달 컴포넌트
-function InventoryModal({ inventory, onClose }) {
-  return (
-    <div className="inventory-modal-backdrop" onClick={onClose}>
-      <div className="inventory-modal" onClick={e => e.stopPropagation()}>
-        <h2>인벤토리</h2>
-        {inventory.length === 0 ? (
-          <p>인벤토리가 비어 있습니다.</p>
-        ) : (
-          <ul>
-            {inventory.map((item, idx) => (
-              <li key={idx}>
-                {item.icon} {item.name} x{item.count || 1}
-              </li>
-            ))}
-          </ul>
-        )}
-        <button onClick={onClose}>닫기</button>
-      </div>
     </div>
   );
 }
