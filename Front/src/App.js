@@ -365,56 +365,41 @@ function InventoryModal({ inventory, onClose }) {
     </div>
   );
 }
+
 // 게임 맵 컴포넌트
 function GameMap({ mapData, players, currentPlayer, direction }) {
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [wrapperSize, setWrapperSize] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight - 100,
-  });
-
+  const [zoomLevel, setZoomLevel] = useState(2.5);
+  
   if (!mapData || !currentPlayer) return null;
 
-  const tileSize = 12;
-  const gap = 1;
+  const tileSize = 20; // 블록 크기
+  const gap = 0;
   const cellSize = tileSize + gap;
 
   const mapWidth = mapData.width * cellSize;
   const mapHeight = mapData.height * cellSize;
 
-  const playerCenterX = currentPlayer.position.x * cellSize + cellSize / 2;
-  const playerCenterY = currentPlayer.position.y * cellSize + cellSize / 2;
+  // 화면 중앙 계산
+  const screenCenterX = window.innerWidth / 2;
+  const screenCenterY = window.innerHeight / 2;
 
-  const visibleWidth = wrapperSize.width / zoomLevel;
-  const visibleHeight = wrapperSize.height / zoomLevel;
+  // 플레이어 월드 좌표
+  const playerWorldX = currentPlayer.position.x * cellSize + cellSize / 2;
+  const playerWorldY = currentPlayer.position.y * cellSize + cellSize / 2;
 
-  const offsetX = Math.max(
-    0,
-    Math.min(playerCenterX - visibleWidth / 2, mapWidth - visibleWidth)
-  );
-  const offsetY = Math.max(
-    0,
-    Math.min(playerCenterY - visibleHeight / 2, mapHeight - visibleHeight)
-  );
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    setZoomLevel(prev => {
-      const nextZoom = e.deltaY < 0 ? prev + 0.1 : prev - 0.1;
-      return Math.max(0.8, Math.min(nextZoom, 2));
-    });
-  };
+  // 카메라 오프셋 (플레이어를 화면 중앙에)
+  const offsetX = screenCenterX - playerWorldX * zoomLevel;
+  const offsetY = screenCenterY - playerWorldY * zoomLevel;
 
   return (
-    <div className="game-map-wrapper" onWheel={handleWheel}>
+    <div className="game-map-wrapper">
       <div
         className="game-map"
         style={{
           width: mapWidth,
           height: mapHeight,
-          transform: `translate(${-offsetX}px, ${-offsetY}px) scale(${zoomLevel})`,
-          transformOrigin: 'top left',
-          position: 'relative'
+          transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoomLevel})`,
+          transformOrigin: '0 0'
         }}
       >
         {/* 맵 셀 */}
@@ -426,13 +411,13 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
               style={{
                 left: x * cellSize,
                 top: y * cellSize,
-                position: 'absolute'
+                width: tileSize,
+                height: tileSize
               }}
             >
               <img 
                 src={getCellIcon(cell.type)} 
                 alt={cell.type} 
-                className="cell-image"
                 width={tileSize}
                 height={tileSize}
               />
@@ -440,14 +425,14 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
           ))
         )}
 
+        {/* 현재 플레이어 */}
         <div
           className="player-icon current-player"
           style={{
             left: currentPlayer.position.x * cellSize,
             top: currentPlayer.position.y * cellSize,
             width: tileSize,
-            height: tileSize,
-            position: 'absolute'
+            height: tileSize
           }}
         >
           <img
@@ -466,10 +451,18 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
               key={p.playerId}
               className="player-icon"
               style={{
-                transform: `translate(${p.position.x * cellSize}px, ${p.position.y * cellSize}px)`
+                left: p.position.x * cellSize,
+                top: p.position.y * cellSize,
+                width: tileSize,
+                height: tileSize
               }}
             >
-              👤
+              <img
+                src={getPlayerImage('down')}
+                alt="other player"
+                width={tileSize}
+                height={tileSize}
+              />
             </div>
           ))
         }

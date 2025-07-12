@@ -1,11 +1,22 @@
-css
+/* 전체 화면 게임 스타일 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+}
+
 .game-container {
   width: 100vw;
   height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: #BFBFBF;
-  font-family: 'Courier New', monospace;
+  position: relative;
+  background: #87CEEB;
   overflow: hidden;
 }
 
@@ -15,52 +26,42 @@ css
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: #A0A0A0;
+  background: #2C3E50;
   color: white;
   font-size: 18px;
 }
 
+/* 게임 뷰 - 전체 화면 */
 .game-view {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 0;
-}
-
-.game-map-wrapper {
-  flex: 1;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
   overflow: hidden;
-  position: relative;
-  background: #c0c0c0;
-  border: none;
 }
 
+/* 맵 래퍼 - 전체 화면 */
+.game-map-wrapper {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: #87CEEB;
+}
+
+/* 맵 - 카메라 시스템 */
 .game-map {
-  position: relative;
+  position: absolute;
+  transition: transform 0.2s ease-out;
+  transform-origin: center center;
 }
 
+/* 맵 셀 */
 .map-cell {
-  width: 12px;
-  height: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
+  position: absolute;
   cursor: pointer;
-  position: relative;
   border: 1px solid rgba(255,255,255,0.1);
-}
-
-.map-cell.mining {
-  animation: shake 0.3s ease-in-out infinite;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(2px, 0); }
 }
 
 .map-cell:hover {
@@ -68,114 +69,146 @@ css
   z-index: 10;
 }
 
+/* 플레이어 */
 .player-icon {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  transition: transform 0.2s ease;
-  font-size: 12px;
   z-index: 100;
   pointer-events: none;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  transition: all 0.2s ease-out;
 }
 
 .current-player {
-  animation: pulse 1.5s infinite;
+  z-index: 110;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+  animation: playerGlow 2s infinite alternate;
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
+@keyframes playerGlow {
+  0% { filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)); }
+  100% { filter: drop-shadow(0 0 12px rgba(255, 215, 0, 1)); }
 }
 
+/* 인벤토리 바 - 반투명 하단 */
 .inventory-bar {
-  background: #999;
-  padding: 15px 0;
-  display: flex;
-  justify-content: center;
-  border-top: 2px solid #888;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 15px;
+  padding: 15px;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .hotbar {
   display: flex;
-  gap: 5px;
+  gap: 8px;
 }
 
 .hotbar-slot {
   width: 60px;
   height: 60px;
-  background: #D3D3D3;
-  border: 2px solid #AAA;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(5px);
 }
 
 .hotbar-slot.selected {
   border-color: #FFD700;
-  background: #ECECEC;
-  box-shadow: 0 0 6px rgba(255, 215, 0, 0.7);
+  background: rgba(255, 215, 0, 0.2);
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
 }
 
 .slot-number {
   position: absolute;
-  top: 2px;
-  left: 4px;
+  top: 4px;
+  left: 6px;
   font-size: 10px;
-  color: #BDC3C7;
+  color: rgba(255, 255, 255, 0.8);
   font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .slot-icon {
-  font-size: 20px;
+  font-size: 24px;
   margin-bottom: 2px;
+  filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 .slot-name {
   font-size: 8px;
-  color: #BDC3C7;
+  color: rgba(255, 255, 255, 0.7);
   text-align: center;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+/* 컨트롤 가이드 - 우상단 */
+.controls-guide {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 1000;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* 인벤토리 모달 */
 .inventory-modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 2000;
 }
 
 .inventory-modal {
-  background: #BFBFBF;
-  padding: 20px;
-  border: 4px solid #888;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  color: black;
+  background: rgba(40, 40, 40, 0.95);
+  backdrop-filter: blur(20px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 30px;
+  color: white;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 .inventory-layout {
   display: flex;
   gap: 24px;
 }
+
 .player-avatar {
-  background: #444;
-  width: 100px;
-  height: 150px;
-  border: 2px inset #666;
+  background: rgba(255, 255, 255, 0.1);
+  width: 120px;
+  height: 180px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: blur(10px);
 }
 
 .avatar-box {
@@ -185,59 +218,46 @@ css
 .inventory-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 15px;
 }
 
 .inventory-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .inventory-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .inventory-slot {
-  width: 48px;
-  height: 48px;
-  background: #DDD;
-  border: 2px solid #AAA;
-  border-radius: 4px;
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: transform 0.15s ease;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(5px);
 }
 
 .inventory-slot.selected {
   border-color: #FFD700;
-  background: #EEE;
-  box-shadow: 0 0 5px rgba(255, 215, 0, 0.6);
-  transform: scale(1.05);
-}
-
-
-.slot-icon {
-  font-size: 20px;
+  background: rgba(255, 215, 0, 0.2);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
 }
 
 .slot-count {
   position: absolute;
   bottom: 2px;
   right: 4px;
-  font-size: 11px;
+  font-size: 10px;
   color: #ECF0F1;
-}
-.controls-guide {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 5px;
-  font-size: 12px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+  font-weight: bold;
 }
