@@ -47,8 +47,6 @@ function App() {
     const player = gameStateRef.current.currentPlayer;
     const mapData = gameStateRef.current.mapData;
     const direction = gameStateRef.current.direction;
-    const inventory = gameStateRef.current.inventory;
-    const selectedTool = inventory[gameStateRef.current.selectedSlot];
   
     if (!player || !mapData) {
       return;
@@ -79,9 +77,21 @@ function App() {
       return;
     }
   
-  
     socket.emit('mine-block', { x: targetX, y: targetY });
   }, [socket, connected]);
+
+  // 위치 계산 헬퍼 함수
+  const calculateNewPosition = (currentPos, direction) => {
+    const { x, y } = currentPos;
+    
+    switch (direction) {
+      case 'up': return { x, y: Math.max(1, y - 1) };
+      case 'down': return { x, y: Math.min(48, y + 1) };
+      case 'left': return { x: Math.max(1, x - 1), y };
+      case 'right': return { x: Math.min(48, x + 1), y };
+      default: return currentPos;
+    }
+  };
 
   // 게임 초기화
   useEffect(() => {
@@ -140,7 +150,6 @@ function App() {
             : p
         );
 
-        // 현재 플레이어는 서버 위치로 보정 (약간의 보정만)
         const updatedCurrent = prev.currentPlayer?.playerId === data.playerId
           ? { ...prev.currentPlayer, position: data.position }
           : prev.currentPlayer;
@@ -153,17 +162,18 @@ function App() {
       });
     });
 
-    // 서버에서 블록 파괴 업데이트 받으면 맵에 반영
-    newSocket.on('block-mined', ({ x, y, playerId, resource, newInventory }) => {
+    // 새로운 블록 업데이트 이벤트 (내구도 시스템)
+    newSocket.on('block-updated', ({ x, y, block, playerId, newInventory }) => {
+      console.log('🔄 block-updated 받음:', { x, y, block, playerId });
       setGameState(prev => {
         if (!prev.mapData) return prev;
-    
+
         // 맵 업데이트
         const newCells = prev.mapData.cells.map(row => [...row]);
         if (newCells[y] && newCells[y][x]) {
-          newCells[y][x] = { type: 'grass' };
+          newCells[y][x] = block; // 새로운 블록 상태로 교체
         }
-    
+
         // 인벤토리 배열 변환 함수
         const convertInventoryToArray = (inventoryObj) => {
           const types = ['wood', 'stone', 'iron', 'diamond'];
@@ -177,15 +187,7 @@ function App() {
           });
           return flat;
         };
-    
-        const updatedCurrentPlayer =
-          prev.currentPlayer?.playerId === playerId
-            ? {
-                ...prev.currentPlayer,
-                inventory: newInventory
-              }
-            : prev.currentPlayer;
-    
+
         return {
           ...prev,
           mapData: { ...prev.mapData, cells: newCells },
@@ -199,96 +201,86 @@ function App() {
       });
     });
 
+    // 채굴 에러 처리
+    newSocket.on('mining-error', (data) => {
+      console.log('❌ 채굴 에러:', data.message);
+    });
+
     return () => newSocket.close();
   }, []);
 
-  // 키보드 컨트롤(이동, 인벤토리, 채굴)
-  // 키보드 컨트롤(이동, 인벤토리, 채굴)
-useEffect(() => {
-  const pressedKeys = new Set(); // 눌린 키 추적
+  // 키보드 컨트롤
+  useEffect(() => {
+    const pressedKeys = new Set();
 
-  const handleKeyDown = (e) => {
-    if (!socket || !connected) return;
-    if (pressedKeys.has(e.key.toLowerCase())) return; // 이미 눌린 키 무시
-    
-    const key = e.key.toLowerCase();
-    pressedKeys.add(key);
+    const handleKeyDown = (e) => {
+      if (!socket || !connected) return;
+      if (pressedKeys.has(e.key.toLowerCase())) return;
+      
+      const key = e.key.toLowerCase();
+      pressedKeys.add(key);
 
-    const moveMap = {
-      w: 'up',
-      a: 'left', 
-      s: 'down',
-      d: 'right',
+      const moveMap = {
+        w: 'up',
+        a: 'left', 
+        s: 'down',
+        d: 'right',
+      };
+
+      if (moveMap[key]) {
+        setGameState(prev => {
+          if (!prev.currentPlayer) return prev;
+          
+          const newPosition = calculateNewPosition(prev.currentPlayer.position, moveMap[key]);
+          
+          return {
+            ...prev,
+            direction: moveMap[key],
+            currentPlayer: {
+              ...prev.currentPlayer,
+              position: newPosition
+            }
+          };
+        });
+        
+        socket.emit('move-player', moveMap[key]);
+      }
+
+      // 인벤토리 슬롯 선택 1~5
+      const slotKeys = ['1', '2', '3', '4', '5'];
+      const slotIndex = slotKeys.indexOf(e.key);
+      if (slotIndex !== -1) {
+        setGameState(prev => ({ ...prev, selectedSlot: slotIndex }));
+        socket.emit('change-hotbar-slot', slotIndex);
+      }
+
+      // 인벤토리 열기/닫기 (E키)
+      if (key === 'e') {
+        setGameState(prev => ({
+          ...prev,
+          isInventoryOpen: !prev.isInventoryOpen
+        }));
+      }
+
+      // J키 누르면 앞 블록 채굴 시도
+      if (key === 'j') {
+        tryMineBlock();
+      }
     };
 
-    if (moveMap[key]) {
-      // 1. 즉시 로컬 상태 업데이트 (딜레이 없음)
-      setGameState(prev => {
-        if (!prev.currentPlayer) return prev;
-        
-        const newPosition = calculateNewPosition(prev.currentPlayer.position, moveMap[key]);
-        
-        return {
-          ...prev,
-          direction: moveMap[key],
-          currentPlayer: {
-            ...prev.currentPlayer,
-            position: newPosition
-          }
-        };
-      });
-      
-      // 2. 서버에 이동 요청 (백그라운드)
-      socket.emit('move-player', moveMap[key]);
-    }
+    const handleKeyUp = (e) => {
+      pressedKeys.delete(e.key.toLowerCase());
+    };
 
-    // 인벤토리 슬롯 선택 1~5
-    const slotKeys = ['1', '2', '3', '4', '5'];
-    const slotIndex = slotKeys.indexOf(e.key);
-    if (slotIndex !== -1) {
-      setGameState(prev => ({ ...prev, selectedSlot: slotIndex }));
-      socket.emit('change-hotbar-slot', slotIndex);
-    }
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
-    // 인벤토리 열기/닫기 (E키)
-    if (key === 'e') {
-      setGameState(prev => ({
-        ...prev,
-        isInventoryOpen: !prev.isInventoryOpen
-      }));
-    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [socket, connected, calculateNewPosition, tryMineBlock]);
 
-    // J키 누르면 앞 블록 채굴 시도
-    if (key === 'j') {
-      tryMineBlock();
-    }
-  };
-
-  const handleKeyUp = (e) => {
-    pressedKeys.delete(e.key.toLowerCase());
-  };
-
-  window.addEventListener('keydown', handleKeyDown);
-  window.addEventListener('keyup', handleKeyUp);
-
-  return () => {
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('keyup', handleKeyUp);
-  };
-}, [socket, connected]);
-
-// 위치 계산 헬퍼 함수 추가
-const calculateNewPosition = (currentPos, direction) => {
-  const { x, y } = currentPos;
-  
-  switch (direction) {
-    case 'up': return { x, y: Math.max(1, y - 1) };
-    case 'down': return { x, y: Math.min(48, y + 1) };
-    case 'left': return { x: Math.max(1, x - 1), y };
-    case 'right': return { x: Math.min(48, x + 1), y };
-    default: return currentPos;
-  }
-};
   if (!connected) {
     return (
       <div className="loading-screen">
@@ -314,7 +306,6 @@ const calculateNewPosition = (currentPos, direction) => {
       tabIndex={0}
       style={{ outline: 'none' }}
     >
-      {/* 메인 게임 화면 */}
       <div className="game-view">
         <GameMap 
           mapData={gameState.mapData}
@@ -324,7 +315,6 @@ const calculateNewPosition = (currentPos, direction) => {
         />
       </div>
 
-      {/* 하단 인벤토리 */}
       <div className="inventory-bar">
         <Hotbar 
           selectedSlot={gameState.selectedSlot}
@@ -341,9 +331,8 @@ const calculateNewPosition = (currentPos, direction) => {
         />
       )}
 
-      {/* 컨트롤 가이드 */}
       <div className="controls-guide">
-        <p>🎮 이동: WASD | 인벤토리: 1-5</p>
+        <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J</p>
       </div>
     </div>
   );
@@ -391,7 +380,6 @@ function InventoryModal({ inventory, onClose }) {
     <div className="inventory-modal-backdrop" onClick={onClose}>
       <div className="inventory-modal" onClick={(e) => e.stopPropagation()}>
         <div className="inventory-layout">
-          {/* 왼쪽: 플레이어 아바타 영역 */}
           <div className="player-avatar">
             <div className="avatar-box">
               <img 
@@ -402,7 +390,6 @@ function InventoryModal({ inventory, onClose }) {
             </div>
           </div>
 
-          {/* 오른쪽: 인벤토리 */}
           <div className="inventory-content">
             <InventoryGrid
               inventory={inventory}
@@ -417,13 +404,12 @@ function InventoryModal({ inventory, onClose }) {
   );
 }
 
-// 게임 맵 컴포넌트
 function GameMap({ mapData, players, currentPlayer, direction }) {
   const [zoomLevel, setZoomLevel] = useState(2.5);
   
   if (!mapData || !currentPlayer) return null;
 
-  const tileSize = 20; // 블록 크기
+  const tileSize = 20;
   const gap = 0;
   const cellSize = tileSize + gap;
 
@@ -453,7 +439,6 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
           transformOrigin: '0 0'
         }}
       >
-        {/* 맵 셀 */}
         {mapData.cells.map((row, y) =>
           row.map((cell, x) => (
             <div 
@@ -467,16 +452,18 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
               }}
             >
               <img 
-                src={getCellIcon(cell.type)} 
+                src={getCellIcon(cell.type)}
                 alt={cell.type} 
                 width={tileSize}
                 height={tileSize}
+                style={{
+                  clipPath: cell.type !== 'grass' ? `inset(0 0 ${cell.miningProgress || 0}% 0)` : 'none'
+                }}
               />
             </div>
           ))
         )}
 
-        {/* 현재 플레이어 */}
         <div
           className="player-icon current-player"
           style={{
@@ -494,7 +481,6 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
           />
         </div>
 
-        {/* 다른 플레이어들 */}
         {players
           .filter(p => p.playerId !== currentPlayer.playerId)
           .map(p => (
@@ -522,7 +508,6 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
   );
 }
 
-// 인벤토리 바 컴포넌트
 function Hotbar({ selectedSlot, inventory }) {
   return (
     <div className="hotbar">

@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const MapGenerator = require('./utils/mapGenerator'); // ← 맨 위에!
+const MapGenerator = require('./utils/mapGenerator');
 require('dotenv').config();
 
 const app = express();
@@ -66,7 +66,7 @@ io.on('connection', (socket) => {
       const newRoom = {
         roomId: roomId,
         players: [],
-        map: gameMap,  // ← 맵 추가!
+        map: gameMap,
         createdAt: new Date().toISOString()
       };
       
@@ -101,8 +101,9 @@ io.on('connection', (socket) => {
           wood: 0, 
           stone: 0, 
           iron: 0, 
-          diamond: 0  // 다이아몬드 추가
+          diamond: 0
         },
+        selectedSlot: 0,
         joinedAt: new Date().toISOString()
       };
 
@@ -198,7 +199,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 블록 채굴
+  // 🔨 새로운 내구도 기반 블록 채굴 시스템
   socket.on('mine-block', (data) => {
     console.log(`⛏️ 블록 채굴: ${socket.id} → (${data.x}, ${data.y})`);
     
@@ -210,29 +211,81 @@ io.on('connection', (socket) => {
     
     // 블록 정보 확인
     const block = room.map.cells[data.y][data.x];
-    if (!block) return;
+    if (!block || block.type === 'grass') return;
     
-    // 자원 획득
-    const resource = getResourceFromBlock(block.type);
-    if (resource) {
-      player.inventory[resource] = (player.inventory[resource] || 0) + 1;
+    // 도구별 효율성 (선택된 슬롯에 따라)
+    const toolEfficiency = {
+      0: { tree: 1, stone: 1, iron_ore: 0, diamond: 0 }, // 맨손 (슬롯 1)
+      1: { tree: 1, stone: 2, iron_ore: 2, diamond: 1 }, // 곡괭이 (슬롯 2)
+      2: { tree: 3, stone: 1, iron_ore: 0, diamond: 0 }, // 도끼 (슬롯 3)
+      3: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }, // 검 (슬롯 4)
+      4: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }  // 기타 (슬롯 5)
+    };
+    
+    const selectedSlot = player.selectedSlot || 0;
+    const damage = toolEfficiency[selectedSlot]?.[block.type] || 0;
+    
+    // 채굴 불가능한 경우
+    if (damage === 0) {
+      console.log(`❌ ${block.type}은(는) 이 도구로 채굴할 수 없음 (슬롯: ${selectedSlot + 1})`);
       
-      // 블록을 잔디로 변경 (채굴 완료)
+      socket.emit('mining-error', {
+        message: `${block.type}은(는) 이 도구로 채굴할 수 없습니다!`,
+        blockType: block.type,
+        toolSlot: selectedSlot
+      });
+      return;
+    }
+    
+    // 내구도 감소
+    block.currentDurability = Math.max(0, block.currentDurability - damage);
+    
+    // 진행률 계산 (아래쪽부터 사라지게)
+    block.miningProgress = Math.min(100, 
+      ((block.maxDurability - block.currentDurability) / block.maxDurability) * 100
+    );
+    
+    console.log(`🔨 ${block.type} 채굴: ${block.currentDurability}/${block.maxDurability} (${Math.round(block.miningProgress)}%) [데미지: ${damage}]`);
+    
+    // 블록이 완전히 파괴됨
+    if (block.currentDurability <= 0) {
+      // 자원 획득
+      const resource = getResourceFromBlock(block.type);
+      if (resource) {
+        // 블록 타입별 드롭 개수
+        const dropAmount = {
+          tree: Math.floor(Math.random() * 3) + 2,    // 2-4개
+          stone: Math.floor(Math.random() * 2) + 2,   // 2-3개  
+          iron_ore: 1,                                // 1개
+          diamond: 1                                  // 1개
+        };
+        
+        const amount = dropAmount[block.type] || 1;
+        player.inventory[resource] = (player.inventory[resource] || 0) + amount;
+        
+        console.log(`✅ ${resource} ${amount}개 획득! (총 ${player.inventory[resource]}개)`);
+      }
+      
+      // 잔디로 변경
       room.map.cells[data.y][data.x] = {
         type: 'grass',
-        durability: 10,
+        maxDurability: 1,
+        currentDurability: 1,
+        miningProgress: 0,
         resources: 0
       };
-      
-      // 모든 플레이어에게 알림
-      io.to(player.roomId).emit('block-mined', {
-        x: data.x,
-        y: data.y,
-        playerId: socket.id,
-        resource: resource,
-        newInventory: player.inventory
-      });
     }
+    console.log('📤 block-updated 전송:', { x: data.x, y: data.y, block });
+    // 모든 플레이어에게 블록 상태 업데이트 전송
+    io.to(player.roomId).emit('block-updated', {
+      x: data.x,
+      y: data.y,
+      block: room.map.cells[data.y][data.x],
+      playerId: socket.id,
+      newInventory: player.inventory,
+      damage: damage,
+      toolSlot: selectedSlot
+    });
   });
 
   // 연결 해제
@@ -263,7 +316,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// 유틸 함수들 (io.on() 밖에!)
+// 유틸 함수들
 function getResourceFromBlock(blockType) {
   const resourceMap = {
     tree: 'wood',
@@ -294,7 +347,7 @@ function isValidPosition(position, map) {
     return false;
   }
   
-  return true; // 일단 모든 위치 이동 가능
+  return true;
 }
 
 const PORT = process.env.PORT || 5001;

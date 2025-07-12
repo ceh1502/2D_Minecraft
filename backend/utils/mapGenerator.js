@@ -1,4 +1,4 @@
-// 마인크래프트 스타일 맵 생성기
+// 마인크래프트 스타일 맵 생성기 (내구도 시스템)
 class MapGenerator {
   constructor(width = 50, height = 50) {
     this.width = width;
@@ -30,7 +30,9 @@ class MapGenerator {
     if (x === 0 || x === this.width - 1 || y === 0 || y === this.height - 1) {
       return {
         type: 'stone',
-        durability: 100,
+        maxDurability: 5,
+        currentDurability: 5,
+        miningProgress: 0,
         resources: 3
       };
     }
@@ -39,31 +41,41 @@ class MapGenerator {
     if (random < 0.65) {        // 65% 잔디
       return {
         type: 'grass',
-        durability: 10,
+        maxDurability: 1,
+        currentDurability: 1,
+        miningProgress: 0,
         resources: 0
       };
-    } else if (random < 0.75) { // 10% 나무 (65% + 10% = 75%)
+    } else if (random < 0.75) { // 10% 나무 (3타)
       return {
         type: 'tree',
-        durability: 50,
+        maxDurability: 3,
+        currentDurability: 3,
+        miningProgress: 0,
         resources: Math.floor(Math.random() * 3) + 2
       };
-    } else if (random < 0.90) { // 15% 돌 (75% + 15% = 90%)
+    } else if (random < 0.90) { // 15% 돌 (5타)
       return {
         type: 'stone',
-        durability: 80,
+        maxDurability: 5,
+        currentDurability: 5,
+        miningProgress: 0,
         resources: Math.floor(Math.random() * 3) + 2
       };
-    } else if (random < 0.97) { // 7% 철광석 (90% + 7% = 97%)
+    } else if (random < 0.97) { // 7% 철광석 (8타)
       return {
         type: 'iron_ore',
-        durability: 120,
+        maxDurability: 8,
+        currentDurability: 8,
+        miningProgress: 0,
         resources: Math.floor(Math.random() * 2) + 1
       };
-    } else {                    // 3% 다이아몬드 (97% + 3% = 100%)
+    } else {                    // 3% 다이아몬드 (12타)
       return {
         type: 'diamond',
-        durability: 150,
+        maxDurability: 12,
+        currentDurability: 12,
+        miningProgress: 0,
         resources: 1
       };
     }
