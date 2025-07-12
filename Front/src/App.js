@@ -47,9 +47,10 @@ function App() {
     const player = gameStateRef.current.currentPlayer;
     const mapData = gameStateRef.current.mapData;
     const direction = gameStateRef.current.direction;
+    const inventory = gameStateRef.current.inventory;
+    const selectedTool = inventory[gameStateRef.current.selectedSlot];
   
     if (!player || !mapData) {
-      console.warn('❌ currentPlayer or mapData is missing!');
       return;
     }
   
@@ -69,6 +70,15 @@ function App() {
     ) {
       return;
     }
+
+    if (
+      targetX === 0 || targetX === mapData.width - 1 ||
+      targetY === 0 || targetY === mapData.height - 1
+    ) {
+      console.log('맵 테두리 파괴 X ');
+      return;
+    }
+  
   
     socket.emit('mine-block', { x: targetX, y: targetY });
   }, [socket, connected]);
@@ -205,9 +215,32 @@ function App() {
       };
 
       if (moveMap[key]) {
-        setGameState(prev => ({ ...prev, direction: moveMap[key] }));
-        socket.emit('move-player', moveMap[key]);
-      }
+        const direction = moveMap[key];
+
+        setGameState(prev => ({ ...prev, direction }));
+
+        const { currentPlayer, mapData } = gameStateRef.current;
+        if (!currentPlayer || !mapData) return;
+
+        let { x, y } = currentPlayer.position;
+        if (direction === 'up') y--;
+        else if (direction === 'down') y++;
+        else if (direction === 'left') x--;
+        else if (direction === 'right') x++;
+
+        // 이동 범위 검사
+        if (x < 0 || x >= mapData.width || y < 0 || y >= mapData.height) return;
+
+        const targetCell = mapData.cells[y][x];
+        if (targetCell.type !== 'grass') {
+          console.log('🚫 이 블록은 지나갈 수 없어!');
+          return; // ❌ 이동 중단
+        }
+
+  // ✅ 이동 허용
+  setGameState(prev => ({ ...prev, direction }));
+  socket.emit('move-player', direction);
+}
 
       // 인벤토리 열기/닫기 (E키)
       if (key === 'e') {
