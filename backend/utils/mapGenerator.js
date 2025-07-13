@@ -48,7 +48,7 @@ class MapGenerator {
       };
     } else if (random < 0.75) { // 10% 나무 (3타)
       return {
-        type: 'wood',
+        type: 'tree',
         maxDurability: 3,
         currentDurability: 3,
         miningProgress: 0,

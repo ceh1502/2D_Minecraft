@@ -71,7 +71,7 @@
     "playerId": "socket_id",
     "username": "Player_1234",
     "position": { "x": 25, "y": 25 },
-    "inventory": { "wood": 0, "stone": 0, "iron": 0, "coal": 0 },
+    "inventory": { "tree": 0, "stone": 0, "iron": 0, "coal": 0 },
     "joinedAt": "2025-07-10T10:30:00.000Z"
   },
   "room": {

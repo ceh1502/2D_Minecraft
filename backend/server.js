@@ -98,7 +98,7 @@ io.on('connection', (socket) => {
         username: `Player_${socket.id.slice(0, 4)}`,
         position: { x: 25, y: 25 },
         inventory: { 
-          wood: 0, 
+          tree: 0, 
           stone: 0, 
           iron: 0, 
           diamond: 0
@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
 
     // 거래 아이템 정의
     const tradeItems = {
-      wooden_pickaxe:  { material: 'wood', amount: 5 },
+      wooden_pickaxe:  { material: 'tree', amount: 5 },
       stone_pickaxe:   { material: 'stone', amount: 5 },
       iron_pickaxe:    { material: 'iron', amount: 5 },
       diamond_pickaxe: { material: 'dia', amount: 5 },
@@ -273,18 +273,30 @@ io.on('connection', (socket) => {
       const block = room.map.cells[data.y][data.x];
       if (!block || block.type === 'grass') return;
       
-      // 🔨 새로운 도구 타입 기반 효율성
+      // 🔨 새로운 도구 타입 기반 효율성 (세분화)
       const getToolEfficiency = (toolType, blockType) => {
         const efficiencyMap = {
-          hand: { wood: 1, stone: 1, iron_ore: 0, diamond: 0 },
-          pickaxe: { wood: 1, stone: 3, iron_ore: 3, diamond: 2 },
-          axe: { wood: 3, stone: 1, iron_ore: 0, diamond: 0 },
-          sword: { wood: 1, stone: 1, iron_ore: 1, diamond: 0 }
+          // 맨손
+          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0 },
+          
+          // 곡괭이류
+          wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0 },
+          stone_pickaxe: { tree: 1, stone: 4, iron_ore: 2, diamond: 1 },
+          iron_pickaxe: { tree: 1, stone: 6, iron_ore: 6, diamond: 4 },
+          diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8 },
+          
+          // 도끼류
+          iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0 },
+          diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0 },
+          
+          // 검류 (기본값과 동일)
+          iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 },
+          diamond_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }
         };
         
         return efficiencyMap[toolType]?.[blockType] || 0;
       };
-      
+            
       // 현재 장착된 도구 타입
       const toolType = data.toolType || 'hand'; // 기본값은 맨손
       const damage = getToolEfficiency(toolType, block.type);
@@ -318,7 +330,7 @@ io.on('connection', (socket) => {
         const resource = getResourceFromBlock(block.type);
         if (resource) {
           const dropAmount = {
-            wood: Math.floor(Math.random() * 3) + 2,
+            tree: Math.floor(Math.random() * 3) + 2,
             stone: Math.floor(Math.random() * 2) + 2,
             iron_ore: 1,
             diamond: 1
@@ -382,7 +394,7 @@ io.on('connection', (socket) => {
 // 유틸 함수들
 function getResourceFromBlock(blockType) {
   const resourceMap = {
-    wood: 'wood',
+    tree: 'tree',
     stone: 'stone', 
     iron_ore: 'iron',
     diamond: 'diamond'
@@ -415,7 +427,7 @@ function isValidPosition(position, map) {
   if (!cell) return false;
   
   // 고체 블록들 (이동 불가)
-  const solidBlocks = ['stone', 'wood', 'iron_ore', 'diamond'];
+  const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond'];
   
   if (solidBlocks.includes(cell.type)) {
     console.log(`🚧 이동 차단: ${cell.type} 블록 (${x}, ${y})`);
