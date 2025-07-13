@@ -20,6 +20,45 @@ body {
   overflow: hidden;
 }
 
+/* 드래그 앤 드롭 스타일 */
+.inventory-slot.has-item {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inventory-slot:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.draggable-item {
+  transition: transform 0.1s ease;
+}
+
+.draggable-item:hover {
+  transform: scale(1.05);
+}
+
+.draggable-item:active {
+  cursor: grabbing !important;
+  transform: scale(0.95);
+}
+
+/* 드래그 중일 때 */
+.inventory-slot.drag-over {
+  background: rgba(255, 215, 0, 0.3);
+  border-color: #FFD700;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+}
+
+/* 핫바 슬롯 스타일 개선 */
+.hotbar-slot.has-item {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.hotbar-slot:hover {
+  transform: scale(1.02);
+}
+
 .loading-screen {
   display: flex;
   flex-direction: column;
