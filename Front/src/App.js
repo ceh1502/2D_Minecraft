@@ -4,10 +4,12 @@ import { InventoryModal, InventoryGrid, Hotbar, getCurrentToolType} from './comp
 import ShopModal from './components/ShopModal';
 import './App.css';
 
+// 🔧 상단으로 빼낸 공통 함수들
+
 // 아이템 타입별 이모지 아이콘 반환 헬퍼 함수
 const getIconForItem = (type) => {
   switch (type) {
-    case 'wood': return '/images/blocks/wood.png';
+    case 'tree': return '/images/blocks/wood.png';
     case 'stone': return '/images/blocks/stone.png';
     case 'iron': return '/images/blocks/iron.png';
     case 'diamond': return '/images/blocks/dia.png';
@@ -47,10 +49,10 @@ const getPlayerImage = (direction) => {
   }
 };
 
-// 이 함수는 상단에 따로 빼서 App 전체에서 재사용할 수 있게 해줘!
+// 🔧 인벤토리 변환 함수 (상단으로 이동)
 const convertInventoryToArray = (inventoryObj) => {
   const types = [
-    'wood', 'stone', 'iron', 'diamond',
+    'tree', 'stone', 'iron', 'diamond',
     'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe',
     'iron_sword', 'diamond_sword',
     'iron_axe', 'diamond_axe',
@@ -214,7 +216,7 @@ function App() {
       const targetCell = mapData.cells[newY] && mapData.cells[newY][newX];
       if (targetCell) {
         // 고체 블록들 (이동 불가)
-        const solidBlocks = ['stone', 'wood', 'iron_ore', 'diamond'];
+        const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond'];
         
         if (solidBlocks.includes(targetCell.type)) {
           console.log(`🚧 이동 차단: ${targetCell.type} 블록`);
@@ -451,7 +453,7 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [socket, connected, calculateNewPosition, tryMineBlock, draggedItem]);
+  }, [socket, connected, tryMineBlock, draggedItem]);
 
   if (!connected) {
     return (
@@ -525,12 +527,10 @@ function App() {
         <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J</p>
       </div>
 
-      
       <button className="shop-button" onClick={() => setIsShopOpen(true)}>
         <img src="/images/blocks/craft.png" alt="상점" style={{ width: 48, height: 48 }} />
       </button>
     </div>
-
   );
 }
 
@@ -639,7 +639,7 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
 }
 
 function getCellIcon(type) {
-  const validTypes = ['grass', 'wood', 'stone', 'iron_ore', 'diamond'];
+  const validTypes = ['grass', 'tree', 'stone', 'iron_ore', 'diamond'];
   if (validTypes.includes(type)) {
     return `/images/blocks/${type}.png`;
   }

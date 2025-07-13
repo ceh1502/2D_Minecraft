@@ -1,20 +1,27 @@
-// 🔨 새로운 함수: 아이템이 도구인지 판별
+// 🔨 새로운 함수: 아이템이 도구인지 판별 (세분화)
 const getToolType = (itemName) => {
   if (!itemName) return 'hand'; // 빈칸은 맨손
   
   switch (itemName) {
-    case 'pickaxe':
-    case 'iron_pickaxe':
-    case 'diamond_pickaxe':
-      return 'pickaxe';
-    case 'axe':
-    case 'iron_axe':
-    case 'diamond_axe':
-      return 'axe';
-    case 'sword':
-    case 'iron_sword':
-    case 'diamond_sword':
-      return 'sword';
+    // 곡괭이류 (세분화)
+    case 'wooden_pickaxe': return 'wooden_pickaxe';
+    case 'stone_pickaxe': return 'stone_pickaxe';
+    case 'iron_pickaxe': return 'iron_pickaxe';
+    case 'diamond_pickaxe': return 'diamond_pickaxe';
+    
+    // 도끼류 (세분화)
+    case 'iron_axe': return 'iron_axe';
+    case 'diamond_axe': return 'diamond_axe';
+    
+    // 검류 (세분화)
+    case 'iron_sword': return 'iron_sword';
+    case 'diamond_sword': return 'diamond_sword';
+    
+    // 기존 호환성 (혹시 모를 경우)
+    case 'pickaxe': return 'wooden_pickaxe';
+    case 'axe': return 'iron_axe';
+    case 'sword': return 'iron_sword';
+    
     default:
       return 'hand'; // 블록이나 기타 아이템은 맨손
   }
@@ -86,6 +93,9 @@ function InventoryGrid({ inventory, selectedSlot, onSlotSelect, onDragStart, onD
     </div>
   );
 }
+
+
+
 
 function InventoryModal({ inventory, onClose, onDragStart, onDrop, onDragOver, onDragEnd }) {
   return (

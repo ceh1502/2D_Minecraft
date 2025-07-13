@@ -3,7 +3,7 @@ import '../styles/ShopModal.css';
 import { InventoryGrid } from './InventoryUI';
 
 const tradeItems = [
-  { name: 'wooden_pickaxe', icon: '/images/items/wooden_pickaxe.png', material: 'wood', amount: 5 },
+  { name: 'wooden_pickaxe', icon: '/images/items/wooden_pickaxe.png', material: 'tree', amount: 5 },
   { name: 'stone_pickaxe', icon: '/images/items/stone_pickaxe.png', material: 'stone', amount: 5 },
   { name: 'iron_pickaxe', icon: '/images/items/iron_pickaxe.png', material: 'iron', amount: 5 },
   { name: 'diamond_pickaxe', icon: '/images/items/diamond_pickaxe.png', material: 'dia', amount: 5 },
