@@ -199,6 +199,67 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('trade-item', ({ itemName }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const inventory = player.inventory || {};
+
+    // 거래 아이템 정의
+    const tradeItems = {
+      wooden_pickaxe:  { material: 'wood', amount: 5 },
+      stone_pickaxe:   { material: 'stone', amount: 5 },
+      iron_pickaxe:    { material: 'iron', amount: 5 },
+      diamond_pickaxe: { material: 'dia', amount: 5 },
+
+      iron_sword:      { material: 'iron', amount: 4 },
+      diamond_sword:   { material: 'dia', amount: 4 },
+
+      iron_axe:        { material: 'iron', amount: 4 },
+      diamond_axe:     { material: 'dia', amount: 4 },
+
+      iron_helmet:     { material: 'iron', amount: 5 },
+      iron_chest:      { material: 'iron', amount: 8 },
+      iron_leggings:   { material: 'iron', amount: 7 },
+      iron_boots:      { material: 'iron', amount: 4 },
+
+      diamond_helmet:  { material: 'dia', amount: 5 },
+      diamond_chest:   { material: 'dia', amount: 8 },
+      diamond_leggings:{ material: 'dia', amount: 7 },
+      diamond_boots:   { material: 'diamond', amount: 4 },
+    };
+
+    const trade = tradeItems[itemName];
+    if (!trade) {
+      socket.emit('trade-error', { message: '존재하지 않는 아이템' });
+      return;
+    }
+
+    const { material, amount } = trade;
+
+    // 자원 확인
+    if (!inventory[material] || inventory[material] < amount) {
+      socket.emit('trade-error', { message: `재료 부족: ${material} ${amount}개 필요` });
+      return;
+    }
+
+    // 자원 차감
+    inventory[material] -= amount;
+
+    // 아이템 추가 (도구나 방어구 슬롯은 따로 다루지 않으면 일반 아이템으로 추가)
+    inventory[itemName] = (inventory[itemName] || 0) + 1;
+
+    // 서버 상태 업데이트
+    player.inventory = inventory;
+    players.set(socket.id, player);
+
+    // 성공 응답
+    socket.emit('trade-success', {
+      newInventory: inventory,
+      acquired: itemName
+    });
+  });
+
     socket.on('mine-block', (data) => {
       console.log(`⛏️ 블록 채굴: ${socket.id} → (${data.x}, ${data.y})`);
       
@@ -215,10 +276,10 @@ io.on('connection', (socket) => {
       // 🔨 새로운 도구 타입 기반 효율성
       const getToolEfficiency = (toolType, blockType) => {
         const efficiencyMap = {
-          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0 },
-          pickaxe: { tree: 1, stone: 3, iron_ore: 3, diamond: 2 },
-          axe: { tree: 3, stone: 1, iron_ore: 0, diamond: 0 },
-          sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }
+          hand: { wood: 1, stone: 1, iron_ore: 0, diamond: 0 },
+          pickaxe: { wood: 1, stone: 3, iron_ore: 3, diamond: 2 },
+          axe: { wood: 3, stone: 1, iron_ore: 0, diamond: 0 },
+          sword: { wood: 1, stone: 1, iron_ore: 1, diamond: 0 }
         };
         
         return efficiencyMap[toolType]?.[blockType] || 0;
@@ -257,7 +318,7 @@ io.on('connection', (socket) => {
         const resource = getResourceFromBlock(block.type);
         if (resource) {
           const dropAmount = {
-            tree: Math.floor(Math.random() * 3) + 2,
+            wood: Math.floor(Math.random() * 3) + 2,
             stone: Math.floor(Math.random() * 2) + 2,
             iron_ore: 1,
             diamond: 1
@@ -321,7 +382,7 @@ io.on('connection', (socket) => {
 // 유틸 함수들
 function getResourceFromBlock(blockType) {
   const resourceMap = {
-    tree: 'wood',
+    wood: 'wood',
     stone: 'stone', 
     iron_ore: 'iron',
     diamond: 'diamond'
@@ -354,7 +415,7 @@ function isValidPosition(position, map) {
   if (!cell) return false;
   
   // 고체 블록들 (이동 불가)
-  const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond'];
+  const solidBlocks = ['stone', 'wood', 'iron_ore', 'diamond'];
   
   if (solidBlocks.includes(cell.type)) {
     console.log(`🚧 이동 차단: ${cell.type} 블록 (${x}, ${y})`);

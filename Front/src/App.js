@@ -1,48 +1,40 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
+import { InventoryModal, InventoryGrid, Hotbar, getCurrentToolType} from './components/InventoryUI'
+import ShopModal from './components/ShopModal';
 import './App.css';
 
 // 아이템 타입별 이모지 아이콘 반환 헬퍼 함수
 const getIconForItem = (type) => {
   switch (type) {
-    case 'wood': return '/images/blocks/tree.png';
+    case 'wood': return '/images/blocks/wood.png';
     case 'stone': return '/images/blocks/stone.png';
     case 'iron': return '/images/blocks/iron.png';
     case 'diamond': return '/images/blocks/dia.png';
     // 도구 아이콘 추가
-    case 'pickaxe': return '/images/tools/pickaxe.png';
-    case 'axe': return '/images/tools/axe.png';
-    case 'sword': return '/images/tools/sword.png';
+    case 'wooden_pickaxe': return '/images/items/wooden_pickaxe.png';
+    case 'stone_pickaxe': return '/images/items/stone_pickaxe.png';
+    case 'iron_pickaxe': return '/images/items/iron_pickaxe.png';
+    case 'diamond_pickaxe': return '/images/items/diamond_pickaxe.png';
+
+    case 'iron_sword': return '/images/items/iron_sword.png';
+    case 'diamond_sword': return '/images/items/diamond_sword.png';
+
+    case 'iron_axe': return '/images/items/iron_axe.png';
+    case 'diamond_axe': return '/images/items/diamond_axe.png';
+
+    // 방어구
+    case 'iron_helmet': return '/images/items/iron_helmet.png';
+    case 'iron_chest': return '/images/items/iron_chest.png';
+    case 'iron_leggings': return '/images/items/iron_leggings.png';
+    case 'iron_boots': return '/images/items/iron_boots.png';
+
+    case 'diamond_helmet': return '/images/items/diamond_helmet.png';
+    case 'diamond_chest': return '/images/items/diamond_chest.png';
+    case 'diamond_leggings': return '/images/items/diamond_leggings.png';
+    case 'diamond_boots': return '/images/items/diamond_boots.png';
     default: return '❓';
   }
-};
-
-// 🔨 새로운 함수: 아이템이 도구인지 판별
-const getToolType = (itemName) => {
-  if (!itemName) return 'hand'; // 빈칸은 맨손
-  
-  switch (itemName) {
-    case 'pickaxe':
-    case 'iron_pickaxe':
-    case 'diamond_pickaxe':
-      return 'pickaxe';
-    case 'axe':
-    case 'iron_axe':
-    case 'diamond_axe':
-      return 'axe';
-    case 'sword':
-    case 'iron_sword':
-    case 'diamond_sword':
-      return 'sword';
-    default:
-      return 'hand'; // 블록이나 기타 아이템은 맨손
-  }
-};
-
-// 🔨 새로운 함수: 현재 선택된 슬롯의 도구 타입 가져오기
-const getCurrentToolType = (inventory, selectedSlot) => {
-  const currentItem = inventory[selectedSlot];
-  return getToolType(currentItem?.name);
 };
 
 const getPlayerImage = (direction) => {
@@ -55,9 +47,36 @@ const getPlayerImage = (direction) => {
   }
 };
 
+// 이 함수는 상단에 따로 빼서 App 전체에서 재사용할 수 있게 해줘!
+const convertInventoryToArray = (inventoryObj) => {
+  const types = [
+    'wood', 'stone', 'iron', 'diamond',
+    'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe',
+    'iron_sword', 'diamond_sword',
+    'iron_axe', 'diamond_axe',
+    'iron_helmet', 'iron_chest', 'iron_leggings', 'iron_boots',
+    'diamond_helmet', 'diamond_chest', 'diamond_leggings', 'diamond_boots'
+  ];
+
+  const flat = new Array(20).fill(null);
+  let i = 0;
+  types.forEach((type) => {
+    const count = inventoryObj[type];
+    if (count > 0 && i < 20) {
+      flat[i++] = {
+        name: type,
+        count,
+        icon: getIconForItem(type),
+      };
+    }
+  });
+  return flat;
+};
+
 function App() {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [isShopOpen, setIsShopOpen] = useState(false);
   const [gameState, setGameState] = useState({
     mapData: null,
     players: [],
@@ -195,7 +214,7 @@ function App() {
       const targetCell = mapData.cells[newY] && mapData.cells[newY][newX];
       if (targetCell) {
         // 고체 블록들 (이동 불가)
-        const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond'];
+        const solidBlocks = ['stone', 'wood', 'iron_ore', 'diamond'];
         
         if (solidBlocks.includes(targetCell.type)) {
           console.log(`🚧 이동 차단: ${targetCell.type} 블록`);
@@ -287,23 +306,6 @@ function App() {
           newCells[y][x] = block; // 새로운 블록 상태로 교체
         }
 
-        // 🔨 수정된 인벤토리 배열 변환 함수 (테스트 도구 제거)
-        const convertInventoryToArray = (inventoryObj) => {
-          const types = ['wood', 'stone', 'iron', 'diamond'];
-          const flat = new Array(20).fill(null);
-          let i = 0;
-          
-          // 기존 자원들만
-          types.forEach(type => {
-            const count = inventoryObj[type];
-            if (count > 0 && i < 20) {
-              flat[i++] = { name: type, count, icon: getIconForItem(type) };
-            }
-          });
-          
-          return flat;
-        };
-
         return {
           ...prev,
           mapData: { ...prev.mapData, cells: newCells },
@@ -324,6 +326,39 @@ function App() {
 
     return () => newSocket.close();
   }, []);
+
+  // 거래 관련 이벤트 수신
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTradeSuccess = (data) => {
+      console.log('✅ 거래 성공:', data);
+      console.log('🧪 서버가 준 인벤토리:', data.newInventory);
+
+      // 예: 받은 아이템 인벤토리에 반영
+      setGameState((prev) => ({
+        ...prev,
+        inventory: convertInventoryToArray(data.newInventory),
+        currentPlayer: {
+          ...prev.currentPlayer,
+          inventory: data.newInventory
+        }
+      }));
+    };
+
+    const handleTradeError = (data) => {
+      console.log('❌ 거래 실패:', data.message);
+      // 나중에 UI로 에러 토스트 띄울 수도 있어
+    };
+
+    socket.on('trade-success', handleTradeSuccess);
+    socket.on('trade-error', handleTradeError);
+
+    return () => {
+      socket.off('trade-success', handleTradeSuccess);
+      socket.off('trade-error', handleTradeError);
+    };
+  }, [socket]);
 
   // 키보드 컨트롤
   useEffect(() => {
@@ -476,105 +511,26 @@ function App() {
         />
       )}
 
+      {isShopOpen && (
+        <ShopModal
+          inventory={gameState.inventory}
+          onClose={() => setIsShopOpen(false)}
+          onBuy={(itemName) => {
+            if (socket) socket.emit('trade-item', { itemName });
+          }}
+        />
+      )}
+
       <div className="controls-guide">
         <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J</p>
       </div>
-    </div>
-  );
-}
 
-// 🔨 업그레이드된 InventoryGrid 컴포넌트
-function InventoryGrid({ inventory, selectedSlot, onSlotSelect, onDragStart, onDrop, onDragOver, onDragEnd }) {
-  const rows = 4, cols = 5;
-  
-  return (
-    <div className="inventory-grid">
-      {Array.from({ length: rows }).map((_, rowIdx) => (
-        <div className="inventory-row" key={rowIdx}>
-          {Array.from({ length: cols }).map((_, colIdx) => {
-            const index = rowIdx * cols + colIdx;
-            const item = inventory[index];
-            const isHotbar = rowIdx === 3;
-            const isSelected = isHotbar && selectedSlot === colIdx;
-            
-            return (
-              <div
-                key={index}
-                className={`inventory-slot ${isSelected ? 'selected' : ''} ${item ? 'has-item' : ''}`}
-                onClick={() => isHotbar && onSlotSelect && onSlotSelect(colIdx)}
-                onDragOver={onDragOver}
-                onDrop={(e) => onDrop(e, index)}
-                style={{ position: 'relative' }}
-              >
-                {item && (
-                  <div
-                    className="draggable-item"
-                    draggable={true}
-                    onDragStart={(e) => onDragStart(e, item, index)}
-                    onDragEnd={onDragEnd}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      cursor: 'grab',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    <div className="slot-icon">
-                      <img
-                        src={item.icon}
-                        alt={item.name}
-                        width={16}
-                        height={16}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    </div>
-                    <div className="slot-count" style={{ pointerEvents: 'none' }}>
-                      {item.count > 1 ? item.count : ''}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      
+      <button className="shop-button" onClick={() => setIsShopOpen(true)}>
+        <img src="/images/blocks/craft.png" alt="상점" style={{ width: 48, height: 48 }} />
+      </button>
     </div>
-  );
-}
 
-function InventoryModal({ inventory, onClose, onDragStart, onDrop, onDragOver, onDragEnd }) {
-  return (
-    <div className="inventory-modal-backdrop" onClick={onClose}>
-      <div className="inventory-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="inventory-layout">
-          <div className="player-avatar">
-            <div className="avatar-box">
-              <img 
-                src="/images/characters/steve.gif"
-                alt="avatar"
-                height={108}
-              />
-            </div>
-          </div>
-
-          <div className="inventory-content">
-            <InventoryGrid
-              inventory={inventory}
-              selectedSlot={null}
-              onSlotSelect={() => {}}
-              onDragStart={onDragStart}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              onDragEnd={onDragEnd}
-            />
-            <button onClick={onClose}>닫기</button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -682,86 +638,8 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
   );
 }
 
-// 🔨 업그레이드된 Hotbar 컴포넌트 (드래그 앤 드롭 지원)
-function Hotbar({ selectedSlot, inventory, onDragStart, onDrop, onDragOver, onDragEnd }) {
-  const currentToolType = getCurrentToolType(inventory, selectedSlot);
-  
-  const getToolEmoji = (toolType) => {
-    switch (toolType) {
-      case 'hand': return '👊';
-      case 'pickaxe': return '⛏️';
-      case 'axe': return '🪓';
-      case 'sword': return '⚔️';
-      default: return '👊';
-    }
-  };
-  
-  return (
-    <div className="hotbar">
-      {[0,1,2,3,4].map((i) => {
-        const item = inventory[i];
-        const isSelected = selectedSlot === i;
-        const toolType = getToolType(item?.name);
-        
-        return (
-          <div
-            key={i}
-            className={`hotbar-slot ${isSelected ? 'selected' : ''} ${item ? 'has-item' : ''}`}
-            onDragOver={onDragOver}
-            onDrop={(e) => onDrop(e, i)}
-            style={{ position: 'relative' }}
-          >
-            <div className="slot-number">{i + 1}</div>
-            
-            {item && (
-              <div
-                className="draggable-item"
-                draggable={true}
-                onDragStart={(e) => onDragStart(e, item, i)}
-                onDragEnd={onDragEnd}
-                style={{
-                  position: 'absolute',
-                  top: '20px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  cursor: 'grab',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center'
-                }}
-              >
-                <div className="slot-icon">
-                  <img
-                    src={item.icon}
-                    alt={item.name}
-                    width={16}
-                    height={16}
-                    style={{ pointerEvents: 'none' }}
-                  />
-                </div>
-                <div className="slot-count" style={{ pointerEvents: 'none' }}>
-                  {item.count > 1 ? item.count : ''}
-                </div>
-              </div>
-            )}
-            
-            <div className="slot-name">
-              {item?.name || ''}
-              {isSelected && !item && (
-                <div style={{ fontSize: '12px', color: '#FFD700' }}>
-                  {getToolEmoji(currentToolType)} {currentToolType}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function getCellIcon(type) {
-  const validTypes = ['grass', 'tree', 'stone', 'iron_ore', 'diamond'];
+  const validTypes = ['grass', 'wood', 'stone', 'iron_ore', 'diamond'];
   if (validTypes.includes(type)) {
     return `/images/blocks/${type}.png`;
   }
