@@ -3,6 +3,8 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const MapGenerator = require('./utils/mapGenerator');
+const MonsterManager = require('./utils/monsterManager');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 const app = express();
@@ -78,8 +80,35 @@ io.on('connection', (socket) => {
         roomId: roomId,
         players: [],
         map: gameMap,
+        monsterManager: new MonsterManager(gameMap, players, io),
+        phase: 'day', // 'day' or 'night'
+        phaseDuration: 60 * 1000, // 1 minute per phase
+        phaseTimer: null,
         createdAt: new Date().toISOString()
       };
+      
+      // Start the day/night cycle
+      newRoom.phaseTimer = setInterval(() => {
+        newRoom.phase = newRoom.phase === 'day' ? 'night' : 'day';
+        io.to(roomId).emit('phase-changed', { phase: newRoom.phase });
+
+        if (newRoom.phase === 'night') {
+          console.log('🌙 Night phase: Spawning monsters...');
+          // Spawn monsters
+          const spawnCount = Math.floor(Math.random() * 5) + 5; // 5-9 monsters
+          for (let i = 0; i < spawnCount; i++) {
+            const { x, y } = findValidSpawn(newRoom.map, newRoom.players, newRoom.monsterManager.getMonsters());
+            if (x !== -1) {
+              newRoom.monsterManager.spawnZombie(x, y);
+            } else {
+              console.log('...could not find a valid spawn location.');
+            }
+          }
+        } else {
+          // Clear monsters at day
+          newRoom.monsterManager.monsters.clear();
+        }
+      }, newRoom.phaseDuration);
       
       gameRooms.set(roomId, newRoom);
       socket.join(roomId);
@@ -89,7 +118,7 @@ io.on('connection', (socket) => {
       
       socket.emit('room-created', {
         success: true,
-        room: newRoom
+        room: sanitizeRoom(newRoom)
       });
     } else {
       console.log('⚠️ 이미 존재하는 방:', roomId);
@@ -135,6 +164,7 @@ io.on('connection', (socket) => {
         username: username,
         position: { x: 25, y: 25 },
         color: getRandomPlayerColor(),
+        health: 20,
         inventory: { 
           tree: 0,  // wood → tree 수정
           stone: 0, 
@@ -146,6 +176,7 @@ io.on('connection', (socket) => {
       };
 
       room.players.push(player);
+      room.monsterManager.players = room.players; // Update monster manager's player list
       players.set(socket.id, { ...player, roomId: roomId });
       
       socket.join(roomId);
@@ -156,7 +187,7 @@ io.on('connection', (socket) => {
       // 새 플레이어 입장 알림 (모든 플레이어에게)
       io.to(roomId).emit('player-joined', {
         player: player,
-        room: room
+        room: sanitizeRoom(room)
       });
 
     } else {
@@ -273,19 +304,20 @@ socket.on('move-player', (direction) => {
       wooden_pickaxe:  { material: 'tree', amount: 5 },
       stone_pickaxe:   { material: 'stone', amount: 5 },
       iron_pickaxe:    { material: 'iron', amount: 5 },
-      diamond_pickaxe: { material: 'dia', amount: 5 },
+      diamond_pickaxe: { material: 'diamond', amount: 5 },
 
       iron_sword:      { material: 'iron', amount: 4 },
-      diamond_sword:   { material: 'dia', amount: 4 },
+      diamond_sword:   { material: 'diamond', amount: 4 },
 
       iron_axe:        { material: 'iron', amount: 4 },
-      diamond_axe:     { material: 'dia', amount: 4 },
+      diamond_axe:     { material: 'diamond', amount: 4 },
 
       iron_helmet:     { material: 'iron', amount: 5 },
       iron_chest:      { material: 'iron', amount: 8 },
       iron_leggings:   { material: 'iron', amount: 7 },
       iron_boots:      { material: 'iron', amount: 4 },
 
+<<<<<<< HEAD
       diamond_helmet:  { material: 'dia', amount: 5 },
       diamond_chest:   { material: 'dia', amount: 8 },
       diamond_leggings:{ material: 'dia', amount: 7 },
@@ -293,6 +325,12 @@ socket.on('move-player', (direction) => {
 
       barbed_wire:     { material: 'iron', amount: 5 },
       wooden_fence:    { material: 'tree', amount: 5 },
+=======
+      diamond_helmet:  { material: 'diamond', amount: 5 },
+      diamond_chest:   { material: 'diamond', amount: 8 },
+      diamond_leggings:{ material: 'diamond', amount: 7 },
+      diamond_boots:   { material: 'diamond', amount: 4 },
+>>>>>>> e936b7a4857059cc4933ba22b7cd787411b5899c
     };
 
     const trade = tradeItems[itemName];
@@ -535,6 +573,49 @@ socket.on('move-player', (direction) => {
     });
   });
 
+  socket.on('attack-monster', ({ monsterId }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+
+    const monster = room.monsterManager.monsters.get(monsterId);
+    if (!monster) return;
+
+    // For now, player damage is 1
+    const damage = 1;
+    monster.hp -= damage;
+
+    if (monster.hp <= 0) {
+      room.monsterManager.monsters.delete(monsterId);
+      console.log(`🧟 Monster ${monsterId} defeated by ${player.playerId}`);
+    }
+
+    io.to(player.roomId).emit('monsters-updated', { monsters: room.monsterManager.getMonsters() });
+  });
+
+  socket.on('restart-game', () => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    player.health = 20;
+    player.position = { x: 25, y: 25 };
+    player.inventory = { tree: 0, stone: 0, iron: 0, diamond: 0 };
+
+    const room = gameRooms.get(player.roomId);
+    if (room) {
+      const roomPlayer = room.players.find(p => p.playerId === socket.id);
+      if (roomPlayer) {
+        roomPlayer.health = 20;
+        roomPlayer.position = { x: 25, y: 25 };
+        roomPlayer.inventory = { tree: 0, stone: 0, iron: 0, diamond: 0 };
+      }
+    }
+
+    socket.emit('player-restarted', { player });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     console.log(`👋 플레이어 연결 해제: ${socket.id}`);
@@ -545,6 +626,7 @@ socket.on('move-player', (direction) => {
       if (room) {
         // 방에서 플레이어 제거
         room.players = room.players.filter(p => p.playerId !== socket.id);
+        room.monsterManager.players = room.players; // Update monster manager's player list
         
         // 다른 플레이어들에게 알림
         io.to(player.roomId).emit('player-left', {
@@ -557,8 +639,15 @@ socket.on('move-player', (direction) => {
         
         // 방이 비었으면 삭제
         if (room.players.length === 0) {
+          clearInterval(room.phaseTimer);
           gameRooms.delete(player.roomId);
           console.log(`🗑️ 빈 방 삭제: ${player.roomId}`);
+        } else {
+          // 다른 플레이어들에게 알림
+          io.to(player.roomId).emit('player-left', {
+            playerId: socket.id,
+            room: sanitizeRoom(room)
+          });
         }
       }
       players.delete(socket.id);
@@ -566,7 +655,49 @@ socket.on('move-player', (direction) => {
   });
 });
 
+// Game loop for monster updates
+setInterval(() => {
+  for (const room of gameRooms.values()) {
+    console.log(`⏰ [Loop] Room: ${room.roomId}, Phase: ${room.phase}`);
+
+    if (room.phase === 'night') {
+      room.monsterManager.moveMonsters();
+      room.monsterManager.attackPlayers();
+    }
+    io.to(room.roomId).emit('monsters-updated', { monsters: room.monsterManager.getMonsters() });
+  }
+}, 1000);
+
 // 유틸 함수들
+function sanitizeRoom(room) {
+  if (!room) return null;
+  return {
+    roomId: room.roomId,
+    players: room.players,
+    map: room.map,
+    phase: room.phase,
+    monsters: room.monsterManager.getMonsters(),
+    createdAt: room.createdAt
+  };
+}
+
+function findValidSpawn(map, players, monsters) {
+  const maxAttempts = 50;
+  for (let i = 0; i < maxAttempts; i++) {
+    const x = Math.floor(Math.random() * map.width);
+    const y = Math.floor(Math.random() * map.height);
+
+    if (map.cells[y][x].type === 'grass') {
+      const isOccupied = players.some(p => p.position.x === x && p.position.y === y) ||
+                         monsters.some(m => m.position.x === x && m.position.y === y);
+      if (!isOccupied) {
+        return { x, y };
+      }
+    }
+  }
+  return { x: -1, y: -1 }; // No valid spawn found
+}
+
 function getResourceFromBlock(blockType) {
   const resourceMap = {
     tree: 'tree',  // tree → tree (수정)

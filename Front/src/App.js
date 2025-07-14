@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { InventoryModal, InventoryGrid, Hotbar, getCurrentToolType} from './components/InventoryUI'
 import ShopModal from './components/ShopModal';
+import HealthBar from './components/HealthBar';
 import './App.css';
 
 // 🔧 상단으로 빼낸 공통 함수들
@@ -85,6 +86,9 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [isShopOpen, setIsShopOpen] = useState(false);
+  const [monsters, setMonsters] = useState([]);
+  const [phase, setPhase] = useState('day');
+  const [isDead, setIsDead] = useState(false);
   
   // ✅ 닉네임 시스템 추가
   const [playerName, setPlayerName] = useState('');
@@ -280,6 +284,32 @@ function App() {
     });
   }, [socket, connected]);
 
+  const tryAttackMonster = useCallback(() => {
+    if (!socket || !connected) return;
+
+    const player = gameStateRef.current.currentPlayer;
+    const direction = gameStateRef.current.direction;
+    const monsters = gameStateRef.current.monsters;
+
+    if (!player || !monsters) return;
+
+    let targetX = player.position.x;
+    let targetY = player.position.y;
+
+    switch (direction) {
+      case 'up': targetY -= 1; break;
+      case 'down': targetY += 1; break;
+      case 'left': targetX -= 1; break;
+      case 'right': targetX += 1; break;
+    }
+
+    const targetMonster = monsters.find(m => m.position.x === targetX && m.position.y === targetY);
+
+    if (targetMonster) {
+      socket.emit('attack-monster', { monsterId: targetMonster.id });
+    }
+  }, [socket, connected]);
+
   // 게임 초기화
   useEffect(() => {
     if (!isNameSet) return;
@@ -428,6 +458,41 @@ function App() {
       console.log('❌ 채굴 에러:', data.message);
     });
 
+    newSocket.on('phase-changed', ({ phase }) => {
+      setPhase(phase);
+    });
+
+    newSocket.on('monsters-updated', ({ monsters }) => {
+      setMonsters(monsters);
+      setGameState(prev => ({
+        ...prev,
+        monsters: monsters
+      }));
+    });
+
+    newSocket.on('player-damaged', ({ newHealth }) => {
+      if (newHealth <= 0) {
+        setIsDead(true);
+      }
+      setGameState(prev => ({
+        ...prev,
+        currentPlayer: {
+          ...prev.currentPlayer,
+          health: newHealth
+        }
+      }));
+    });
+
+    newSocket.on('player-restarted', (data) => {
+      setIsDead(false);
+      setGameState(prev => ({
+        ...prev,
+        currentPlayer: data.player,
+        players: prev.players.map(p => p.playerId === data.player.playerId ? data.player : p),
+        inventory: convertInventoryToArray(data.player.inventory)
+      }));
+    });
+
     newSocket.on('room-error', (data) => {
       console.error('🏠 방 에러:', data.message);
     });
@@ -548,6 +613,10 @@ function App() {
       if (key === 'k') {
         tryPlaceBlock();
       }
+
+      if (key === 'l') {
+        tryAttackMonster();
+      }
     };
 
     const handleKeyUp = (e) => {
@@ -614,6 +683,17 @@ function App() {
     );
   }
 
+  if (isDead) {
+    return (
+      <div className="death-screen">
+        <h1>You Died</h1>
+        <button onClick={() => socket.emit('restart-game')}>
+          Restart Game
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       className="game-container"
@@ -625,6 +705,7 @@ function App() {
         <GameMap 
           mapData={gameState.mapData}
           players={gameState.players}
+          monsters={monsters}
           currentPlayer={gameState.currentPlayer}
           direction={gameState.direction}
         />
@@ -669,17 +750,23 @@ function App() {
       )}
 
       <div className="controls-guide">
-        <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J</p>
+        <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J | 설치: K | 공격: L</p>
       </div>
 
       <button className="shop-button" onClick={() => setIsShopOpen(true)}>
         <img src="/images/blocks/craft.png" alt="상점" style={{ width: 48, height: 48 }} />
       </button>
+
+      <HealthBar health={gameState.currentPlayer?.health} maxHealth={20} />
+
+      <div className="phase-indicator">
+        {phase === 'day' ? '☀️' : '🌙'}
+      </div>
     </div>
   );
 }
 
-function GameMap({ mapData, players, currentPlayer, direction }) {
+function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
   const [zoomLevel, setZoomLevel] = useState(2.5);
   
   if (!mapData || !currentPlayer) return null;
@@ -823,6 +910,26 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
             </div>
           ))
         }
+
+        {monsters.map(m => (
+          <div
+            key={m.id}
+            className="monster-icon"
+            style={{
+              left: m.position.x * cellSize,
+              top: m.position.y * cellSize,
+              width: tileSize,
+              height: tileSize
+            }}
+          >
+            <img
+              src={getMonsterImage(m.type)}
+              alt={m.type}
+              width={tileSize}
+              height={tileSize}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -836,5 +943,14 @@ function getCellIcon(type) {
   return '';
 }
 
+<<<<<<< HEAD
+=======
+function getMonsterImage(type) {
+  switch (type) {
+    case 'zombie': return '/images/characters/zombie.png';
+    default: return '';
+  }
+}
+>>>>>>> e936b7a4857059cc4933ba22b7cd787411b5899c
 
 export default App;
