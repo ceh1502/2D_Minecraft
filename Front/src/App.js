@@ -9,7 +9,7 @@ import './App.css';
 // 아이템 타입별 이모지 아이콘 반환 헬퍼 함수
 const getIconForItem = (type) => {
   switch (type) {
-    case 'tree': return '/images/blocks/wood.png';
+    case 'tree': return '/images/blocks/tree.png';
     case 'stone': return '/images/blocks/stone.png';
     case 'iron': return '/images/blocks/iron.png';
     case 'diamond': return '/images/blocks/dia.png';
@@ -48,6 +48,8 @@ const getPlayerImage = (direction) => {
     default: return '/images/characters/avatar_down.png';
   }
 };
+
+const PLACEABLE_BLOCKS = ['tree', 'stone', 'iron', 'diamond'];
 
 // 🔧 인벤토리 변환 함수 (상단으로 이동)
 const convertInventoryToArray = (inventoryObj) => {
@@ -233,7 +235,48 @@ function App() {
     return { x: newX, y: newY };
   };
 
-  // 🎯 게임 초기화 - 완전 수정된 버전
+  const tryPlaceBlock = useCallback(() => {
+    if (!socket || !connected) return;
+
+    const player = gameStateRef.current.currentPlayer;
+    const mapData = gameStateRef.current.mapData;
+    const direction = gameStateRef.current.direction;
+    const selectedItem = gameStateRef.current.inventory[gameStateRef.current.selectedSlot];
+
+    if (!selectedItem || !PLACEABLE_BLOCKS.includes(selectedItem.name)) {
+      console.log('❌ 설치 불가 아이템:', selectedItem?.name);
+      return;
+    }
+
+    let targetX = player.position.x;
+    let targetY = player.position.y;
+
+    switch (direction) {
+      case 'up': targetY -= 1; break;
+      case 'down': targetY += 1; break;
+      case 'left': targetX -= 1; break;
+      case 'right': targetX += 1; break;
+    }
+
+    const targetCell = mapData?.cells?.[targetY]?.[targetX];
+    const belowCell = mapData?.cells?.[targetY + 1]?.[targetX];
+    
+    const solidBlocks = ['grass', 'stone', 'tree', 'iron_ore', 'diamond'];
+    const isPlaceableSurface = belowCell && solidBlocks.includes(belowCell.type);
+
+    if (targetCell?.type !== 'grass' || !isPlaceableSurface) {
+      console.log('❌ 설치 불가한 위치');
+      return;
+    }
+
+    socket.emit('place-block', {
+      x: targetX,
+      y: targetY,
+      blockType: selectedItem.name
+    });
+  }, [socket, connected]);
+
+  // 게임 초기화
   useEffect(() => {
     if (!isNameSet) return;
     
@@ -497,6 +540,10 @@ function App() {
       if (key === 'j') {
         tryMineBlock();
       }
+
+      if (key === 'k') {
+        tryPlaceBlock();
+      }
     };
 
     const handleKeyUp = (e) => {
@@ -610,6 +657,10 @@ function App() {
           onBuy={(itemName) => {
             if (socket) socket.emit('trade-item', { itemName });
           }}
+          onDragStart={handleDragStart}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
         />
       )}
 

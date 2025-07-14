@@ -23,7 +23,7 @@ const tradeItems = [
 
 const ITEMS_PER_PAGE = 8;
 
-const ShopModal = ({ inventory, onClose, onBuy }) => {
+const ShopModal = ({ inventory, onClose, onBuy, onDragStart, onDrop, onDragOver, onDragEnd }) => {
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(tradeItems.length / ITEMS_PER_PAGE);
 
@@ -75,11 +75,15 @@ const ShopModal = ({ inventory, onClose, onBuy }) => {
       </div>
 
       <div className="inventory-box">
-        <InventoryGrid
-          inventory={inventory}
-          selectedSlot={null}
-          onSlotSelect={() => {}}
-        />
+      <InventoryGrid
+        inventory={inventory}
+        selectedSlot={null}
+        onSlotSelect={() => {}}
+        onDragStart={onDragStart}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      />
       </div>
 
       <div className="shop-footer">

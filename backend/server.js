@@ -262,151 +262,228 @@ socket.on('move-player', (direction) => {
     });
   });
 
-  // 🔨 수정된 블록 채굴 시스템
-  socket.on('mine-block', (data) => {
-    console.log(`⛏️ 블록 채굴: ${socket.id} → (${data.x}, ${data.y})`);
-    
+  socket.on('trade-item', ({ itemName }) => {
     const player = players.get(socket.id);
     if (!player) return;
-    
-    const room = gameRooms.get(player.roomId);
-    if (!room) return;
-    
-    // 블록 정보 확인
-    const block = room.map.cells[data.y][data.x];
-    if (!block || block.type === 'grass') return;
-    
-    // 🔨 새로운 도구 타입 기반 효율성 (세분화)
-    const getToolEfficiency = (toolType, blockType) => {
-      const efficiencyMap = {
-        // 맨손
-        hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0 },
-        
-        // 곡괭이류
-        wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0 },
-        stone_pickaxe: { tree: 1, stone: 4, iron_ore: 2, diamond: 1 },
-        iron_pickaxe: { tree: 1, stone: 6, iron_ore: 6, diamond: 4 },
-        diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8 },
-        
-        // 도끼류
-        iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0 },
-        diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0 },
-        
-        // 검류 (기본값과 동일)
-        iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 },
-        diamond_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }
-      };
-      
-      return efficiencyMap[toolType]?.[blockType] || 0;
+
+    const inventory = player.inventory || {};
+
+    // 거래 아이템 정의
+    const tradeItems = {
+      wooden_pickaxe:  { material: 'tree', amount: 5 },
+      stone_pickaxe:   { material: 'stone', amount: 5 },
+      iron_pickaxe:    { material: 'iron', amount: 5 },
+      diamond_pickaxe: { material: 'dia', amount: 5 },
+
+      iron_sword:      { material: 'iron', amount: 4 },
+      diamond_sword:   { material: 'dia', amount: 4 },
+
+      iron_axe:        { material: 'iron', amount: 4 },
+      diamond_axe:     { material: 'dia', amount: 4 },
+
+      iron_helmet:     { material: 'iron', amount: 5 },
+      iron_chest:      { material: 'iron', amount: 8 },
+      iron_leggings:   { material: 'iron', amount: 7 },
+      iron_boots:      { material: 'iron', amount: 4 },
+
+      diamond_helmet:  { material: 'dia', amount: 5 },
+      diamond_chest:   { material: 'dia', amount: 8 },
+      diamond_leggings:{ material: 'dia', amount: 7 },
+      diamond_boots:   { material: 'diamond', amount: 4 },
     };
-    
-    const toolType = data.toolType || 'hand';
-    const damage = getToolEfficiency(toolType, block.type);
-    
-    console.log(`🔨 도구: ${toolType}, 블록: ${block.type}, 데미지: ${damage}`);
-    
-    // 채굴 불가능한 경우
-    if (damage === 0) {
-      console.log(`❌ ${block.type}은(는) ${toolType}으로 채굴할 수 없음`);
-      
-      socket.emit('mining-error', {
-        message: `${block.type}은(는) 현재 도구로 채굴할 수 없습니다!`,
-        blockType: block.type,
-        toolType: toolType
-      });
+
+    const trade = tradeItems[itemName];
+    if (!trade) {
+      socket.emit('trade-error', { message: '존재하지 않는 아이템' });
       return;
     }
-    
-    // 내구도 감소
-    block.currentDurability = Math.max(0, block.currentDurability - damage);
-    
-    // 진행률 계산
-    block.miningProgress = Math.min(100, 
-      ((block.maxDurability - block.currentDurability) / block.maxDurability) * 100
-    );
-    
-    console.log(`🔨 ${block.type} 채굴: ${block.currentDurability}/${block.maxDurability} (${Math.round(block.miningProgress)}%) [데미지: ${damage}]`);
-    
-    if (block.currentDurability <= 0) {
-      // 완전히 파괴됨 - 자원 획득
-      const resource = getResourceFromBlock(block.type);
-      if (resource) {
-        const dropAmount = {
-          tree: Math.floor(Math.random() * 3) + 2,
-          stone: Math.floor(Math.random() * 2) + 2,
-          iron_ore: 1,
-          diamond: 1
-        };
-        
-        const amount = dropAmount[block.type] || 1;
-        player.inventory[resource] = (player.inventory[resource] || 0) + amount;
-        
-        console.log(`✅ ${resource} ${amount}개 획득! (총 ${player.inventory[resource]}개)`);
-      }
-      
-      // 잔디로 변경
-      room.map.cells[data.y][data.x] = {
-        type: 'grass',
-        maxDurability: 1,
-        currentDurability: 1,
-        miningProgress: 0,
-        resources: 0
-      };
+
+    const { material, amount } = trade;
+
+    // 자원 확인
+    if (!inventory[material] || inventory[material] < amount) {
+      socket.emit('trade-error', { message: `재료 부족: ${material} ${amount}개 필요` });
+      return;
     }
-    
-    // 모든 플레이어에게 업데이트 전송
-    io.to(player.roomId).emit('block-updated', {
-      x: data.x,
-      y: data.y,
-      block: room.map.cells[data.y][data.x],
-      playerId: socket.id,
-      newInventory: player.inventory,
-      damage: damage,
-      toolType: toolType
+
+    // 자원 차감
+    inventory[material] -= amount;
+
+    // 아이템 추가 (도구나 방어구 슬롯은 따로 다루지 않으면 일반 아이템으로 추가)
+    inventory[itemName] = (inventory[itemName] || 0) + 1;
+
+    // 서버 상태 업데이트
+    player.inventory = inventory;
+    players.set(socket.id, player);
+
+    // 성공 응답
+    socket.emit('trade-success', {
+      newInventory: inventory,
+      acquired: itemName
     });
   });
 
-  // 거래 아이템
-  socket.on('trade-item', (data) => {
-    console.log(`🛒 거래 요청: ${socket.id} → ${data.itemName}`);
-    
-    const player = players.get(socket.id);
-    if (!player) return;
-    
-    // 간단한 거래 로직 (나무 10개 → 곡괭이 1개)
-    const trades = {
-      iron_pickaxe: { cost: { tree: 10 }, item: 'iron_pickaxe' },
-      diamond_pickaxe: { cost: { tree: 20, stone: 10 }, item: 'diamond_pickaxe' },
-      iron_axe: { cost: { tree: 15 }, item: 'iron_axe' },
-      diamond_axe: { cost: { tree: 25, stone: 15 }, item: 'diamond_axe' }
-    };
-    
-    const trade = trades[data.itemName];
-    if (!trade) {
-      socket.emit('trade-error', { message: '존재하지 않는 아이템입니다.' });
-      return;
-    }
-    
-    // 비용 확인
-    for (const [resource, cost] of Object.entries(trade.cost)) {
-      if ((player.inventory[resource] || 0) < cost) {
-        socket.emit('trade-error', { 
-          message: `${resource} ${cost}개가 필요합니다. (현재: ${player.inventory[resource] || 0}개)` 
+  socket.on('mine-block', (data) => {
+      console.log(`⛏️ 블록 채굴: ${socket.id} → (${data.x}, ${data.y})`);
+      
+      const player = players.get(socket.id);
+      if (!player) return;
+      
+      const room = gameRooms.get(player.roomId);
+      if (!room) return;
+      
+      // 블록 정보 확인
+      const block = room.map.cells[data.y][data.x];
+      if (!block || block.type === 'grass') return;
+      
+      // 🔨 새로운 도구 타입 기반 효율성 (세분화)
+      const getToolEfficiency = (toolType, blockType) => {
+        const efficiencyMap = {
+          // 맨손
+          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0 },
+          
+          // 곡괭이류
+          wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0 },
+          stone_pickaxe: { tree: 1, stone: 4, iron_ore: 2, diamond: 1 },
+          iron_pickaxe: { tree: 1, stone: 6, iron_ore: 6, diamond: 4 },
+          diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8 },
+          
+          // 도끼류
+          iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0 },
+          diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0 },
+          
+          // 검류 (기본값과 동일)
+          iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 },
+          diamond_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }
+        };
+        
+        return efficiencyMap[toolType]?.[blockType] || 0;
+      };
+            
+      // 현재 장착된 도구 타입
+      const toolType = data.toolType || 'hand'; // 기본값은 맨손
+      const damage = getToolEfficiency(toolType, block.type);
+      
+      console.log(`🔨 도구: ${toolType}, 블록: ${block.type}, 데미지: ${damage}`);
+      
+      // 채굴 불가능한 경우
+      if (damage === 0) {
+        console.log(`❌ ${block.type}은(는) ${toolType}으로 채굴할 수 없음`);
+        
+        socket.emit('mining-error', {
+          message: `${block.type}은(는) 현재 도구로 채굴할 수 없습니다!`,
+          blockType: block.type,
+          toolType: toolType
         });
         return;
       }
+      
+      // 내구도 감소
+      block.currentDurability = Math.max(0, block.currentDurability - damage);
+      
+      // 진행률 계산
+      block.miningProgress = Math.min(100, 
+        ((block.maxDurability - block.currentDurability) / block.maxDurability) * 100
+      );
+      
+      console.log(`🔨 ${block.type} 채굴: ${block.currentDurability}/${block.maxDurability} (${Math.round(block.miningProgress)}%) [데미지: ${damage}]`);
+      
+      if (block.currentDurability <= 0) {
+        // 완전히 파괴됨 - 자원 획득
+        const resource = getResourceFromBlock(block.type);
+        if (resource) {
+          const dropAmount = {
+            tree: Math.floor(Math.random() * 3) + 2,
+            stone: Math.floor(Math.random() * 2) + 2,
+            iron_ore: 1,
+            diamond: 1
+          };
+          
+          const amount = dropAmount[block.type] || 1;
+          player.inventory[resource] = (player.inventory[resource] || 0) + amount;
+          
+          console.log(`✅ ${resource} ${amount}개 획득! (총 ${player.inventory[resource]}개)`);
+        }
+        
+        // 잔디로 변경
+        room.map.cells[data.y][data.x] = {
+          type: 'grass',
+          maxDurability: 1,
+          currentDurability: 1,
+          miningProgress: 0,
+          resources: 0
+        };
+      }
+      
+      // 모든 플레이어에게 업데이트 전송
+      io.to(player.roomId).emit('block-updated', {
+        x: data.x,
+        y: data.y,
+        block: room.map.cells[data.y][data.x],
+        playerId: socket.id,
+        newInventory: player.inventory,
+        damage: damage,
+        toolType: toolType
+      });
+  });
+
+  const placeableBlocks = ['tree', 'stone', 'iron', 'diamond'];
+
+  socket.on('place-block', ({ x, y, blockType }) => {
+    const player = players.get(socket.id);
+    if (!player || !blockType) return;
+
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+
+    if (
+      x < 0 || x >= room.map.width ||
+      y < 0 || y >= room.map.height - 1 // y+1까지 쓰니까 -1
+    ) {
+      socket.emit('placement-error', { message: '좌표 범위 초과' });
+      return;
+    }  
+
+    const cell = room.map.cells[y]?.[x];
+    const below = room.map.cells[y + 1]?.[x];
+
+    console.log('📦 설치 시도 위치:', { x, y });
+
+    // 설치 가능한 블록인지 확인
+    if (!placeableBlocks.includes(blockType)) {
+      socket.emit('placement-error', { message: '설치할 수 없는 블록' });
+      return;
     }
-    
-    // 거래 실행
-    for (const [resource, cost] of Object.entries(trade.cost)) {
-      player.inventory[resource] -= cost;
+
+    // 설치 조건: 빈 공간이며, 아래가 단단한 블록이어야 함
+    const solidBlocks = ['grass', 'stone', 'tree', 'iron_ore', 'diamond'];
+    const isPlaceableSurface = below && solidBlocks.includes(below.type);
+
+    if (cell.type !== 'grass' || !isPlaceableSurface) {
+      socket.emit('placement-error', { message: '설치 불가한 위치' });
+      return;
     }
-    
-    player.inventory[trade.item] = (player.inventory[trade.item] || 0) + 1;
-    
-    socket.emit('trade-success', {
-      message: `${trade.item} 구매 완료!`,
-      newInventory: player.inventory
+
+    // 인벤토리에 해당 블록이 있는지 확인
+    if (!player.inventory[blockType] || player.inventory[blockType] <= 0) {
+      socket.emit('placement-error', { message: '아이템 부족' });
+      return;
+    }
+
+    // 아이템 개수 차감
+    player.inventory[blockType] -= 1;
+
+    // 맵에 블록 설치
+    room.map.cells[y][x] = { type: blockType };
+    console.log(`✅ ${blockType} 블록 설치 완료 → (${x}, ${y})`);
+
+    // 클라이언트에 반영
+    io.to(player.roomId).emit('block-updated', {
+      x,
+      y,
+      block: { type: blockType },
+      playerId: player.playerId,
+      newInventory: player.inventory,
     });
   });
 
