@@ -13,6 +13,9 @@ const getIconForItem = (type) => {
     case 'stone': return '/images/blocks/stone.png';
     case 'iron': return '/images/blocks/iron.png';
     case 'diamond': return '/images/blocks/dia.png';
+    // 울타리 아이템 추가
+    case 'barbed_wire': return '/images/blocks/barbed_wire.png';
+    case 'wooden_fence': return '/images/blocks/wooden_fence.png';
     // 도구 아이콘 추가
     case 'wooden_pickaxe': return '/images/items/wooden_pickaxe.png';
     case 'stone_pickaxe': return '/images/items/stone_pickaxe.png';
@@ -49,12 +52,13 @@ const getPlayerImage = (direction) => {
   }
 };
 
-const PLACEABLE_BLOCKS = ['tree', 'stone', 'iron', 'diamond'];
+const PLACEABLE_BLOCKS = ['tree', 'stone', 'iron', 'diamond', 'barbed_wire', 'wooden_fence'];
 
 // 🔧 인벤토리 변환 함수 (상단으로 이동)
 const convertInventoryToArray = (inventoryObj) => {
   const types = [
     'tree', 'stone', 'iron', 'diamond',
+    'barbed_wire', 'wooden_fence',
     'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe',
     'iron_sword', 'diamond_sword',
     'iron_axe', 'diamond_axe',
@@ -223,7 +227,7 @@ function App() {
       const targetCell = mapData.cells[newY] && mapData.cells[newY][newX];
       if (targetCell) {
         // 고체 블록들 (이동 불가)
-        const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond'];
+        const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond', 'barbed_wire', 'wooden_fence'];
         
         if (solidBlocks.includes(targetCell.type)) {
           console.log(`🚧 이동 차단: ${targetCell.type} 블록`);
@@ -825,11 +829,12 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
 }
 
 function getCellIcon(type) {
-  const validTypes = ['grass', 'tree', 'stone', 'iron_ore', 'diamond'];
+  const validTypes = ['grass', 'tree', 'stone', 'iron_ore', 'diamond', 'barbed_wire', 'wooden_fence'];
   if (validTypes.includes(type)) {
     return `/images/blocks/${type}.png`;
   }
   return '';
 }
+
 
 export default App;

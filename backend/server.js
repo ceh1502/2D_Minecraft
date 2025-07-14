@@ -289,7 +289,10 @@ socket.on('move-player', (direction) => {
       diamond_helmet:  { material: 'dia', amount: 5 },
       diamond_chest:   { material: 'dia', amount: 8 },
       diamond_leggings:{ material: 'dia', amount: 7 },
-      diamond_boots:   { material: 'diamond', amount: 4 },
+      diamond_boots:   { material: 'dia', amount: 4 },
+
+      barbed_wire:     { material: 'iron', amount: 5 },
+      wooden_fence:    { material: 'tree', amount: 5 },
     };
 
     const trade = tradeItems[itemName];
@@ -336,25 +339,27 @@ socket.on('move-player', (direction) => {
       const block = room.map.cells[data.y][data.x];
       if (!block || block.type === 'grass') return;
       
+      const targetBlockType = block.type;
+      
       // 🔨 새로운 도구 타입 기반 효율성 (세분화)
       const getToolEfficiency = (toolType, blockType) => {
         const efficiencyMap = {
           // 맨손
-          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0 },
+          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 1 },
           
           // 곡괭이류
-          wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0 },
-          stone_pickaxe: { tree: 1, stone: 4, iron_ore: 2, diamond: 1 },
-          iron_pickaxe: { tree: 1, stone: 6, iron_ore: 6, diamond: 4 },
-          diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8 },
+          wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0, barbed_wire: 2, wooden_fence: 1 },
+          stone_pickaxe: { tree: 1, stone: 4, iron_ore: 2, diamond: 1, barbed_wire: 4, wooden_fence: 2 },
+          iron_pickaxe: { tree: 1, stone: 6, iron_ore: 6, diamond: 4, barbed_wire: 6, wooden_fence: 3 },
+          diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8, barbed_wire: 12, wooden_fence: 6 },
           
           // 도끼류
-          iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0 },
-          diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0 },
+          iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 6 },
+          diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 12 },
           
           // 검류 (기본값과 동일)
-          iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 },
-          diamond_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0 }
+          iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0, barbed_wire: 3, wooden_fence: 2 },
+          diamond_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0, barbed_wire: 6, wooden_fence: 4 }
         };
         
         return efficiencyMap[toolType]?.[blockType] || 0;
@@ -362,9 +367,9 @@ socket.on('move-player', (direction) => {
             
       // 현재 장착된 도구 타입
       const toolType = data.toolType || 'hand'; // 기본값은 맨손
-      const damage = getToolEfficiency(toolType, block.type);
+      const damage = getToolEfficiency(toolType, targetBlockType);
       
-      console.log(`🔨 도구: ${toolType}, 블록: ${block.type}, 데미지: ${damage}`);
+      console.log(`🔨 도구: ${toolType}, 블록: ${targetBlockType}, 데미지: ${damage}`);
       
       // 채굴 불가능한 경우
       if (damage === 0) {
@@ -378,7 +383,23 @@ socket.on('move-player', (direction) => {
         return;
       }
       
-      // 내구도 감소
+      // 블록 내구도 초기화 (기존 블록에 내구도 정보가 없는 경우)
+      if (block.currentDurability === undefined || block.maxDurability === undefined) {
+        const defaultDurability = {
+          'tree': 3,
+          'stone': 5,
+          'iron_ore': 8,
+          'diamond': 12,
+          'barbed_wire': 2,
+          'wooden_fence': 2
+        };
+        
+        block.currentDurability = defaultDurability[block.type] || 1;
+        block.maxDurability = defaultDurability[block.type] || 1;
+        block.miningProgress = 0;
+      }
+      
+      // 블록 내구도 감소
       block.currentDurability = Math.max(0, block.currentDurability - damage);
       
       // 진행률 계산
@@ -396,7 +417,9 @@ socket.on('move-player', (direction) => {
             tree: Math.floor(Math.random() * 3) + 2,
             stone: Math.floor(Math.random() * 2) + 2,
             iron_ore: 1,
-            diamond: 1
+            diamond: 1,
+            barbed_wire: 1,
+            wooden_fence: 1
           };
           
           const amount = dropAmount[block.type] || 1;
@@ -413,21 +436,32 @@ socket.on('move-player', (direction) => {
           miningProgress: 0,
           resources: 0
         };
+        
+        // 블록 파괴 시 업데이트
+        io.to(player.roomId).emit('block-updated', {
+          x: data.x,
+          y: data.y,
+          block: room.map.cells[data.y][data.x],
+          playerId: socket.id,
+          newInventory: player.inventory,
+          damage: damage,
+          toolType: toolType
+        });
+      } else {
+        // 블록 채굴 진행 중
+        io.to(player.roomId).emit('block-updated', {
+          x: data.x,
+          y: data.y,
+          block: { ...block },
+          playerId: socket.id,
+          newInventory: player.inventory,
+          damage: damage,
+          toolType: toolType
+        });
       }
-      
-      // 모든 플레이어에게 업데이트 전송
-      io.to(player.roomId).emit('block-updated', {
-        x: data.x,
-        y: data.y,
-        block: room.map.cells[data.y][data.x],
-        playerId: socket.id,
-        newInventory: player.inventory,
-        damage: damage,
-        toolType: toolType
-      });
   });
 
-  const placeableBlocks = ['tree', 'stone', 'iron', 'diamond'];
+  const placeableBlocks = ['tree', 'stone', 'iron', 'diamond', 'barbed_wire', 'wooden_fence'];
 
   socket.on('place-block', ({ x, y, blockType }) => {
     const player = players.get(socket.id);
@@ -473,15 +507,29 @@ socket.on('move-player', (direction) => {
     // 아이템 개수 차감
     player.inventory[blockType] -= 1;
 
-    // 맵에 블록 설치
-    room.map.cells[y][x] = { type: blockType };
+    // 맵에 블록 설치 (내구도 설정)
+    const blockDurability = {
+      'tree': 3,
+      'stone': 5, 
+      'iron': 8,
+      'diamond': 12,
+      'barbed_wire': 2,
+      'wooden_fence': 2
+    };
+    
+    room.map.cells[y][x] = { 
+      type: blockType,
+      currentDurability: blockDurability[blockType] || 1,
+      maxDurability: blockDurability[blockType] || 1,
+      miningProgress: 0
+    };
     console.log(`✅ ${blockType} 블록 설치 완료 → (${x}, ${y})`);
 
     // 클라이언트에 반영
     io.to(player.roomId).emit('block-updated', {
       x,
       y,
-      block: { type: blockType },
+      block: room.map.cells[y][x],
       playerId: player.playerId,
       newInventory: player.inventory,
     });
@@ -524,7 +572,9 @@ function getResourceFromBlock(blockType) {
     tree: 'tree',  // tree → tree (수정)
     stone: 'stone', 
     iron_ore: 'iron',
-    diamond: 'diamond'
+    diamond: 'diamond',
+    barbed_wire: 'barbed_wire',
+    wooden_fence: 'wooden_fence'
   };
   return resourceMap[blockType];
 }
@@ -554,7 +604,7 @@ function isValidPosition(position, map) {
   if (!cell) return false;
   
   // 고체 블록들 (이동 불가)
-  const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond'];
+  const solidBlocks = ['stone', 'tree', 'iron_ore', 'diamond', 'barbed_wire', 'wooden_fence'];
   
   if (solidBlocks.includes(cell.type)) {
     console.log(`🚧 이동 차단: ${cell.type} 블록 (${x}, ${y})`);
@@ -566,10 +616,28 @@ function isValidPosition(position, map) {
 }
 
 const PORT = process.env.PORT || 5001;
-server.listen(PORT, () => {
+
+// 🔄 서버 시작 시 완전 초기화
+function initializeServer() {
+  // 기존 데이터 완전 삭제
+  gameRooms.clear();
+  players.clear();
+  
+  console.log('🧹 ================================');
+  console.log('🔄 서버 데이터 완전 초기화 완료!');
+  console.log('🗑️ 모든 방 삭제됨');
+  console.log('👥 모든 플레이어 삭제됨');
+  console.log('🧹 ================================');
+}
+
+server.listen(PORT, '0.0.0.0', () => {
+  // 🔄 서버 시작 시 초기화 실행
+  initializeServer();
+  
   console.log('🚀 ================================');
   console.log(`🎮 Minecraft Game Server Started!`);
-  console.log(`📡 Server running on: http://localhost:${PORT}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`📡 Local: http://localhost:${PORT}`);
+  console.log(`🌐 Network: http://143.248.162.5:${PORT}`);
+  console.log(`🔗 Health: http://143.248.162.5:${PORT}/api/health`);
   console.log('🚀 ================================');
 });

@@ -19,6 +19,8 @@ const tradeItems = [
   { name: 'diamond_chest', icon: '/images/items/diamond_chest.png', material: 'dia', amount: 8 },
   { name: 'diamond_leggings', icon: '/images/items/diamond_leggings.png', material: 'dia', amount: 7 },
   { name: 'diamond_boots', icon: '/images/items/diamond_boots.png', material: 'dia', amount: 4 },
+  { name: 'barbed_wire', icon: '/images/blocks/barbed_wire.png', material: 'iron', amount: 5 },
+  { name: 'wooden_fence', icon: '/images/blocks/wooden_fence.png', material: 'tree', amount: 5 },
 ];
 
 const ITEMS_PER_PAGE = 8;
