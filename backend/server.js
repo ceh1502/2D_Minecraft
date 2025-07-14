@@ -260,7 +260,7 @@ io.on('connection', (socket) => {
     });
   });
 
-    socket.on('mine-block', (data) => {
+  socket.on('mine-block', (data) => {
       console.log(`⛏️ 블록 채굴: ${socket.id} → (${data.x}, ${data.y})`);
       
       const player = players.get(socket.id);
@@ -362,7 +362,68 @@ io.on('connection', (socket) => {
         damage: damage,
         toolType: toolType
       });
+  });
+
+  const placeableBlocks = ['tree', 'stone', 'iron', 'diamond'];
+
+  socket.on('place-block', ({ x, y, blockType }) => {
+    const player = players.get(socket.id);
+    if (!player || !blockType) return;
+
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+
+    if (
+      x < 0 || x >= room.map.width ||
+      y < 0 || y >= room.map.height - 1 // y+1까지 쓰니까 -1
+    ) {
+      socket.emit('placement-error', { message: '좌표 범위 초과' });
+      return;
+    }  
+
+    const cell = room.map.cells[y]?.[x];
+    const below = room.map.cells[y + 1]?.[x];
+
+    console.log('📦 설치 시도 위치:', { x, y });
+
+    // 설치 가능한 블록인지 확인
+    if (!placeableBlocks.includes(blockType)) {
+      socket.emit('placement-error', { message: '설치할 수 없는 블록' });
+      return;
+    }
+
+    // 설치 조건: 빈 공간이며, 아래가 단단한 블록이어야 함
+    const solidBlocks = ['grass', 'stone', 'tree', 'iron_ore', 'diamond'];
+    const isPlaceableSurface = below && solidBlocks.includes(below.type);
+
+    if (cell.type !== 'grass' || !isPlaceableSurface) {
+      socket.emit('placement-error', { message: '설치 불가한 위치' });
+      return;
+    }
+
+    // 인벤토리에 해당 블록이 있는지 확인
+    if (!player.inventory[blockType] || player.inventory[blockType] <= 0) {
+      socket.emit('placement-error', { message: '아이템 부족' });
+      return;
+    }
+
+    // 아이템 개수 차감
+    player.inventory[blockType] -= 1;
+
+    // 맵에 블록 설치
+    room.map.cells[y][x] = { type: blockType };
+    console.log(`✅ ${blockType} 블록 설치 완료 → (${x}, ${y})`);
+
+    // 클라이언트에 반영
+    io.to(player.roomId).emit('block-updated', {
+      x,
+      y,
+      block: { type: blockType },
+      playerId: player.playerId,
+      newInventory: player.inventory,
     });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     console.log(`👋 플레이어 연결 해제: ${socket.id}`);

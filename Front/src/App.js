@@ -49,6 +49,8 @@ const getPlayerImage = (direction) => {
   }
 };
 
+const PLACEABLE_BLOCKS = ['tree', 'stone', 'iron', 'diamond'];
+
 // 🔧 인벤토리 변환 함수 (상단으로 이동)
 const convertInventoryToArray = (inventoryObj) => {
   const types = [
@@ -227,6 +229,47 @@ function App() {
     
     return { x: newX, y: newY };
   };
+
+  const tryPlaceBlock = useCallback(() => {
+    if (!socket || !connected) return;
+
+    const player = gameStateRef.current.currentPlayer;
+    const mapData = gameStateRef.current.mapData;
+    const direction = gameStateRef.current.direction;
+    const selectedItem = gameStateRef.current.inventory[gameStateRef.current.selectedSlot];
+
+    if (!selectedItem || !PLACEABLE_BLOCKS.includes(selectedItem.name)) {
+      console.log('❌ 설치 불가 아이템:', selectedItem?.name);
+      return;
+    }
+
+    let targetX = player.position.x;
+    let targetY = player.position.y;
+
+    switch (direction) {
+      case 'up': targetY -= 1; break;
+      case 'down': targetY += 1; break;
+      case 'left': targetX -= 1; break;
+      case 'right': targetX += 1; break;
+    }
+
+    const targetCell = mapData?.cells?.[targetY]?.[targetX];
+    const belowCell = mapData?.cells?.[targetY + 1]?.[targetX];
+    
+    const solidBlocks = ['grass', 'stone', 'tree', 'iron_ore', 'diamond'];
+    const isPlaceableSurface = belowCell && solidBlocks.includes(belowCell.type);
+
+    if (targetCell?.type !== 'grass' || !isPlaceableSurface) {
+      console.log('❌ 설치 불가한 위치');
+      return;
+    }
+
+    socket.emit('place-block', {
+      x: targetX,
+      y: targetY,
+      blockType: selectedItem.name
+    });
+  }, [socket, connected]);
 
   // 게임 초기화
   useEffect(() => {
@@ -439,6 +482,10 @@ function App() {
       // J키 누르면 앞 블록 채굴 시도
       if (key === 'j') {
         tryMineBlock();
+      }
+
+      if (key === 'k') {
+        tryPlaceBlock();
       }
     };
 
