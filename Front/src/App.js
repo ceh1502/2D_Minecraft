@@ -3,6 +3,8 @@ import { io } from 'socket.io-client';
 import { InventoryModal, InventoryGrid, Hotbar, getCurrentToolType} from './components/InventoryUI'
 import ShopModal from './components/ShopModal';
 import HealthBar from './components/HealthBar';
+import LoginScreen from './components/LoginScreen';
+import RankingBoard from './components/RankingBoard';
 import './App.css';
 
 // 🔧 상단으로 빼낸 공통 함수들
@@ -90,7 +92,16 @@ function App() {
   const [phase, setPhase] = useState('day');
   const [isDead, setIsDead] = useState(false);
   
-  // ✅ 닉네임 시스템 추가
+  // 🔐 인증 시스템
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+  
+  // 🏆 랭킹 시스템
+  const [ranking, setRanking] = useState([]);
+  const [userScore, setUserScore] = useState(0);
+  
+  // ✅ 닉네임 시스템 (호환성 유지)
   const [playerName, setPlayerName] = useState('');
   const [isNameSet, setIsNameSet] = useState(false);
   
@@ -112,6 +123,75 @@ function App() {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // 🔐 로그인 처리
+  const handleLoginSuccess = ({ user, token }) => {
+    setCurrentUser(user);
+    setAuthToken(token);
+    setIsLoggedIn(true);
+    setPlayerName(user.name);
+    setIsNameSet(true);
+    setUserScore(user.score || 0);
+    
+    console.log('✅ 로그인 성공:', user);
+  };
+
+  // 동적 API URL 결정
+  const getApiUrl = () => {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    
+    if (hostname === 'minecrafton.store' || hostname === 'www.minecrafton.store') {
+      return `${protocol}//${hostname}`;
+    } else {
+      return 'http://localhost:5001';
+    }
+  };
+
+  // 🏆 랭킹 데이터 가져오기
+  const fetchRanking = useCallback(async () => {
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/ranking`);
+      const data = await response.json();
+      if (data.success) {
+        setRanking(data.ranking);
+      }
+    } catch (error) {
+      console.error('❌ 랭킹 조회 실패:', error);
+    }
+  }, []);
+
+  // 초기 로그인 상태 확인
+  useEffect(() => {
+    const savedToken = localStorage.getItem('authToken');
+    const savedUser = localStorage.getItem('currentUser');
+    
+    if (savedToken && savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        setCurrentUser(user);
+        setAuthToken(savedToken);
+        setIsLoggedIn(true);
+        setPlayerName(user.name);
+        setIsNameSet(true);
+        setUserScore(user.score || 0);
+      } catch (error) {
+        console.error('저장된 로그인 정보 복원 실패:', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+      }
+    }
+  }, []);
+
+  // 주기적으로 랭킹 업데이트
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchRanking();
+      const interval = setInterval(fetchRanking, 30000); // 30초마다
+      return () => clearInterval(interval);
+    }
+  }, [isLoggedIn, fetchRanking]);
 
   // 🖱️ 드래그 핸들러들
   const handleDragStart = (e, item, index) => {
@@ -316,7 +396,7 @@ function App() {
     
     console.log('🎮 게임 시작!');
     
-    const SERVER_URL = 'http://143.248.162.5:5001';
+    const SERVER_URL = getApiUrl();
     console.log('🔗 서버 연결 시도:', SERVER_URL);
 
     const newSocket = io(SERVER_URL, {
@@ -334,22 +414,30 @@ function App() {
       console.log('✅ 서버 연결 성공:', newSocket.id);
       setConnected(true);
       
+      // 연결 성공 후 바로 방 생성/입장 시도
+      console.log('🏠 방 생성 요청: main_room');
+      newSocket.emit('create-room', 'main_room');
+      
       setTimeout(() => {
-        console.log('🏠 방 생성 요청: main_room');
-        newSocket.emit('create-room', 'main_room');
-        setTimeout(() => {
-          const joinData = {
-            roomId: 'main_room',
-            username: playerName
-          };
-          console.log('🚪 방 입장 요청:', joinData);
-          newSocket.emit('join-room', joinData);
-        }, 100);
+        const joinData = {
+          roomId: 'main_room',
+          username: playerName,
+          token: authToken // JWT 토큰 추가
+        };
+        console.log('🚪 방 입장 요청:', joinData);
+        newSocket.emit('join-room', joinData);
       }, 500);
     });
 
     newSocket.on('connect_error', (error) => {
       console.error('❌ 서버 연결 실패:', error);
+      setConnected(false);
+      
+      // 연결 실패 시 재시도
+      setTimeout(() => {
+        console.log('🔄 서버 재연결 시도...');
+        newSocket.connect();
+      }, 3000);
     });
 
     newSocket.on('disconnect', (reason) => {
@@ -361,17 +449,23 @@ function App() {
     newSocket.on('player-joined', (data) => {
       console.log('🏠 플레이어 입장 데이터:', data);
       
-      // 내 플레이어 찾기
-      const myPlayer = data.room.players.find(p => p.playerId === newSocket.id);
-      console.log('👤 내 플레이어 정보:', myPlayer);
-      
-      setGameState(prev => ({
-        ...prev,
-        players: data.room.players,
-        currentPlayer: myPlayer // 확실히 내 플레이어만 설정
-      }));
-      
-      newSocket.emit('request-map');
+      // 데이터 구조 확인 및 처리
+      if (data.player && data.player.playerId === newSocket.id) {
+        // 내가 방에 입장한 경우
+        console.log('👤 내 플레이어 정보:', data.player);
+        
+        setGameState(prev => ({
+          ...prev,
+          currentPlayer: data.player
+        }));
+        
+        // 맵 데이터 요청
+        console.log('🗺️ 맵 데이터 요청');
+        newSocket.emit('request-map');
+      } else {
+        // 다른 플레이어가 입장한 경우
+        console.log('👥 다른 플레이어 입장:', data.player);
+      }
     });
 
     // 🎯 맵 데이터 수신 - 플레이어 정보 재확인
@@ -493,15 +587,48 @@ function App() {
       }));
     });
 
+    // 🏆 점수 업데이트 이벤트
+    newSocket.on('score-updated', ({ newScore, pointsAdded }) => {
+      console.log(`🎯 점수 업데이트: +${pointsAdded} (총 ${newScore}점)`);
+      setUserScore(newScore);
+      
+      // 현재 사용자 정보 업데이트
+      if (currentUser) {
+        const updatedUser = { ...currentUser, score: newScore };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      }
+    });
+
+    // 🏆 랭킹 업데이트 이벤트
+    newSocket.on('ranking-updated', ({ ranking }) => {
+      console.log('🏆 랭킹 업데이트:', ranking);
+      setRanking(ranking);
+    });
+
+    // 방 생성 성공
+    newSocket.on('room-created', (data) => {
+      console.log('✅ 방 생성 성공:', data);
+    });
+
     newSocket.on('room-error', (data) => {
       console.error('🏠 방 에러:', data.message);
+      // 에러 발생 시에도 게임을 계속할 수 있도록 방 입장 재시도
+      setTimeout(() => {
+        console.log('🔄 방 입장 재시도...');
+        newSocket.emit('join-room', {
+          roomId: 'main_room',
+          username: playerName,
+          token: authToken
+        });
+      }, 1000);
     });
 
     return () => {
       console.log('🔌 소켓 연결 종료');
       newSocket.close();
     };
-  }, [isNameSet, playerName]);
+  }, [isNameSet, playerName, authToken]);
 
   // 거래 관련 이벤트 수신
   useEffect(() => {
@@ -630,39 +757,11 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [socket, connected, tryMineBlock, draggedItem]);
+  }, [socket, connected, tryMineBlock, tryPlaceBlock, tryAttackMonster, draggedItem]);
 
-  // ✅ 닉네임 입력 화면 (가장 먼저 체크)
-  if (!isNameSet) {
-    return (
-      <div className="name-input-screen">
-        <div className="name-input-container">
-          <h1>🎮 마인크래프트</h1>
-          <h2>플레이어 이름을 입력하세요</h2>
-          <input
-            type="text"
-            placeholder="닉네임 입력..."
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && playerName.trim()) {
-                setIsNameSet(true);
-              }
-            }}
-            maxLength={12}
-            autoFocus
-          />
-          <button 
-            onClick={() => {
-              if (playerName.trim()) setIsNameSet(true);
-            }}
-            disabled={!playerName.trim()}
-          >
-            게임 시작
-          </button>
-        </div>
-      </div>
-    );
+  // 🔐 로그인 화면 (가장 먼저 체크)
+  if (!isLoggedIn) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
   if (!connected) {
@@ -762,6 +861,13 @@ function App() {
       <div className="phase-indicator">
         {phase === 'day' ? '☀️' : '🌙'}
       </div>
+
+      {/* 🏆 랭킹보드 */}
+      <RankingBoard 
+        currentUser={currentUser}
+        ranking={ranking}
+        isVisible={true}
+      />
     </div>
   );
 }
@@ -943,14 +1049,11 @@ function getCellIcon(type) {
   return '';
 }
 
-<<<<<<< HEAD
-=======
 function getMonsterImage(type) {
   switch (type) {
     case 'zombie': return '/images/characters/zombie.png';
     default: return '';
   }
 }
->>>>>>> e936b7a4857059cc4933ba22b7cd787411b5899c
 
 export default App;

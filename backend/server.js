@@ -1,34 +1,68 @@
+// 🔧 환경변수를 가장 먼저 로드
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const session = require('express-session');
+const passport = require('./config/passport');
+const { sequelize, testConnection } = require('./config/database');
+const Player = require('./models/Player');
+const authRoutes = require('./routes/auth');
+const rankingRoutes = require('./routes/ranking');
 const MapGenerator = require('./utils/mapGenerator');
 const MonsterManager = require('./utils/monsterManager');
 const { v4: uuidv4 } = require('uuid');
-require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
 
 // CORS 설정
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? 
+  process.env.ALLOWED_ORIGINS.split(',') : 
+  ["http://localhost:3000", "https://minecrafton.store", "https://www.minecrafton.store"];
+
 app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"]
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 
+// 미들웨어 설정
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 세션 설정
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'minecraft-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false }
+}));
+
+// Passport 초기화
+app.use(passport.initialize());
+app.use(passport.session());
+
+// 라우터 설정
+app.use('/auth', authRoutes);
+app.use('/api/ranking', rankingRoutes);
 
 // Socket.io 설정
 const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
 // 게임 상태 저장
 const gameRooms = new Map();
 const players = new Map();
+const guestRanking = new Map(); // 게스트 사용자 랭킹 (메모리 기반)
+global.guestRanking = guestRanking; // 라우터에서 접근 가능하도록
 
 // API 라우트
 app.get('/api/health', (req, res) => {
@@ -118,7 +152,9 @@ io.on('connection', (socket) => {
       
       socket.emit('room-created', {
         success: true,
-        room: sanitizeRoom(newRoom)
+        roomId: newRoom.roomId,
+        phase: newRoom.phase,
+        playerCount: 0
       });
     } else {
       console.log('⚠️ 이미 존재하는 방:', roomId);
@@ -186,8 +222,19 @@ io.on('connection', (socket) => {
       
       // 새 플레이어 입장 알림 (모든 플레이어에게)
       io.to(roomId).emit('player-joined', {
-        player: player,
-        room: sanitizeRoom(room)
+        player: {
+          playerId: player.playerId,
+          username: player.username,
+          position: player.position,
+          color: player.color,
+          health: player.health,
+          joinedAt: player.joinedAt
+        },
+        roomInfo: {
+          roomId: room.roomId,
+          playerCount: room.players.length,
+          phase: room.phase
+        }
       });
 
     } else {
@@ -317,20 +364,13 @@ socket.on('move-player', (direction) => {
       iron_leggings:   { material: 'iron', amount: 7 },
       iron_boots:      { material: 'iron', amount: 4 },
 
-<<<<<<< HEAD
-      diamond_helmet:  { material: 'dia', amount: 5 },
-      diamond_chest:   { material: 'dia', amount: 8 },
-      diamond_leggings:{ material: 'dia', amount: 7 },
-      diamond_boots:   { material: 'dia', amount: 4 },
-
-      barbed_wire:     { material: 'iron', amount: 5 },
-      wooden_fence:    { material: 'tree', amount: 5 },
-=======
       diamond_helmet:  { material: 'diamond', amount: 5 },
       diamond_chest:   { material: 'diamond', amount: 8 },
       diamond_leggings:{ material: 'diamond', amount: 7 },
       diamond_boots:   { material: 'diamond', amount: 4 },
->>>>>>> e936b7a4857059cc4933ba22b7cd787411b5899c
+
+      barbed_wire:     { material: 'iron', amount: 5 },
+      wooden_fence:    { material: 'tree', amount: 5 },
     };
 
     const trade = tradeItems[itemName];
@@ -590,6 +630,53 @@ socket.on('move-player', (direction) => {
     if (monster.hp <= 0) {
       room.monsterManager.monsters.delete(monsterId);
       console.log(`🧟 Monster ${monsterId} defeated by ${player.playerId}`);
+      
+      // 점수 처리 (DB 사용자 또는 게스트)
+      if (player.dbPlayerId) {
+        // 데이터베이스 사용자
+        Player.findByPk(player.dbPlayerId).then(dbPlayer => {
+          if (dbPlayer) {
+            dbPlayer.addScore(10).then(newScore => {
+              console.log(`🎯 ${player.username} (DB) 점수 증가: ${newScore}점 (+10)`);
+              
+              socket.emit('score-updated', {
+                newScore: newScore,
+                pointsAdded: 10
+              });
+              
+              broadcastRanking(player.roomId);
+            });
+          }
+        }).catch(err => {
+          console.error('❌ 점수 업데이트 에러:', err);
+        });
+      } else {
+        // 게스트 사용자
+        const guestId = player.playerId;
+        let guestData = guestRanking.get(guestId);
+        
+        if (!guestData) {
+          guestData = {
+            id: guestId,
+            name: player.username,
+            profilePicture: '/images/characters/avatar_down.png',
+            score: 0,
+            isGuest: true
+          };
+        }
+        
+        guestData.score += 10;
+        guestRanking.set(guestId, guestData);
+        
+        console.log(`🎯 ${player.username} (게스트) 점수 증가: ${guestData.score}점 (+10)`);
+        
+        socket.emit('score-updated', {
+          newScore: guestData.score,
+          pointsAdded: 10
+        });
+        
+        broadcastRanking(player.roomId);
+      }
     }
 
     io.to(player.roomId).emit('monsters-updated', { monsters: room.monsterManager.getMonsters() });
@@ -632,7 +719,11 @@ socket.on('move-player', (direction) => {
         io.to(player.roomId).emit('player-left', {
           playerId: socket.id,
           username: player.username,
-          room: room
+          roomInfo: {
+            roomId: room.roomId,
+            playerCount: room.players.length,
+            phase: room.phase
+          }
         });
         
         console.log(`📢 ${player.username}님이 게임을 떠났습니다.`);
@@ -646,7 +737,12 @@ socket.on('move-player', (direction) => {
           // 다른 플레이어들에게 알림
           io.to(player.roomId).emit('player-left', {
             playerId: socket.id,
-            room: sanitizeRoom(room)
+            username: player.username,
+            roomInfo: {
+              roomId: room.roomId,
+              playerCount: room.players.length,
+              phase: room.phase
+            }
           });
         }
       }
@@ -669,16 +765,41 @@ setInterval(() => {
 }, 1000);
 
 // 유틸 함수들
-function sanitizeRoom(room) {
-  if (!room) return null;
-  return {
-    roomId: room.roomId,
-    players: room.players,
-    map: room.map,
-    phase: room.phase,
-    monsters: room.monsterManager.getMonsters(),
-    createdAt: room.createdAt
-  };
+
+// 랭킹 브로드캐스트 함수
+async function broadcastRanking(roomId) {
+  try {
+    // 데이터베이스 플레이어
+    const topPlayers = await Player.getTopPlayers(10);
+    const dbRanking = topPlayers.map(player => ({
+      id: player.id,
+      name: player.name,
+      profilePicture: player.profilePicture,
+      score: player.score,
+      isGuest: false
+    }));
+    
+    // 게스트 플레이어
+    const guestRankingArray = Array.from(guestRanking.values());
+    
+    // 통합 랭킹
+    const combinedRanking = [...dbRanking, ...guestRankingArray]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+    
+    io.to(roomId).emit('ranking-updated', {
+      ranking: combinedRanking.map((p, index) => ({
+        rank: index + 1,
+        id: p.id,
+        name: p.name,
+        profilePicture: p.profilePicture,
+        score: p.score,
+        isGuest: p.isGuest || false
+      }))
+    });
+  } catch (error) {
+    console.error('❌ 랭킹 브로드캐스트 에러:', error);
+  }
 }
 
 function findValidSpawn(map, players, monsters) {
@@ -749,21 +870,31 @@ function isValidPosition(position, map) {
 const PORT = process.env.PORT || 5001;
 
 // 🔄 서버 시작 시 완전 초기화
-function initializeServer() {
+async function initializeServer() {
   // 기존 데이터 완전 삭제
   gameRooms.clear();
   players.clear();
+  
+  // 데이터베이스 연결 및 테이블 생성
+  try {
+    await testConnection();
+    await sequelize.sync({ alter: true }); // 테이블 구조 업데이트
+    console.log('✅ 데이터베이스 테이블 동기화 완료');
+  } catch (error) {
+    console.error('❌ 데이터베이스 초기화 실패:', error);
+  }
   
   console.log('🧹 ================================');
   console.log('🔄 서버 데이터 완전 초기화 완료!');
   console.log('🗑️ 모든 방 삭제됨');
   console.log('👥 모든 플레이어 삭제됨');
+  console.log('💾 데이터베이스 준비 완료');
   console.log('🧹 ================================');
 }
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   // 🔄 서버 시작 시 초기화 실행
-  initializeServer();
+  await initializeServer();
   
   console.log('🚀 ================================');
   console.log(`🎮 Minecraft Game Server Started!`);
