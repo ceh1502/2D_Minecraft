@@ -318,3 +318,82 @@ body {
 .shop-button:hover {
   transform: scale(1.1);
 }
+
+/* 닉네임 입력 화면 스타일 */
+.name-input-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.name-input-container {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  min-width: 400px;
+}
+
+.name-input-container h1 {
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 2.5em;
+}
+
+.name-input-container h2 {
+  margin-bottom: 30px;
+  color: #666;
+  font-size: 1.2em;
+  font-weight: normal;
+}
+
+.name-input-container input {
+  width: 100%;
+  padding: 15px;
+  font-size: 18px;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.name-input-container input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+}
+
+.name-input-container button {
+  width: 100%;
+  padding: 15px;
+  font-size: 18px;
+  font-weight: bold;
+  color: white;
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.name-input-container button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.name-input-container button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 플레이어 닉네임 태그 스타일 */
+.player-nametag {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.3);
+}

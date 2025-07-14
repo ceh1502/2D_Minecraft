@@ -79,6 +79,11 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [isShopOpen, setIsShopOpen] = useState(false);
+  
+  // ✅ 닉네임 시스템 추가
+  const [playerName, setPlayerName] = useState('');
+  const [isNameSet, setIsNameSet] = useState(false);
+  
   const [gameState, setGameState] = useState({
     mapData: null,
     players: [],
@@ -144,7 +149,7 @@ function App() {
     setDraggedItem(null);
     setDraggedFromIndex(null);
   };
-
+  
   // 🔨 수정된 채굴 함수 - 도구 타입 전송
   const tryMineBlock = useCallback(() => {
     if (!socket || !connected) return;
@@ -228,106 +233,163 @@ function App() {
     return { x: newX, y: newY };
   };
 
-  // 게임 초기화
+  // 🎯 게임 초기화 - 완전 수정된 버전
   useEffect(() => {
+    if (!isNameSet) return;
+    
     console.log('🎮 게임 시작!');
     
-    const newSocket = io('http://localhost:5001', {
+    const SERVER_URL = 'http://143.248.162.5:5001';
+    console.log('🔗 서버 연결 시도:', SERVER_URL);
+
+    const newSocket = io(SERVER_URL, {
       autoConnect: true,
-      reconnection: true
+      reconnection: true,
+      reconnectionDelay: 1000,
+      timeout: 10000,
+      transports: ['polling', 'websocket'],
+      forceNew: true
     });
     
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      console.log('✅ 서버 연결:', newSocket.id);
+      console.log('✅ 서버 연결 성공:', newSocket.id);
       setConnected(true);
       
-      // 자동으로 방 생성/입장
       setTimeout(() => {
+        console.log('🏠 방 생성 요청: main_room');
         newSocket.emit('create-room', 'main_room');
         setTimeout(() => {
-          newSocket.emit('join-room', 'main_room');
+          const joinData = {
+            roomId: 'main_room',
+            username: playerName
+          };
+          console.log('🚪 방 입장 요청:', joinData);
+          newSocket.emit('join-room', joinData);
         }, 100);
       }, 500);
     });
 
-    // 방 입장 성공
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ 서버 연결 실패:', error);
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      console.log('🔌 연결 끊김:', reason);
+      setConnected(false);
+    });
+
+    // 🎯 방 입장 성공 - 내 플레이어 정보 확실히 설정
     newSocket.on('player-joined', (data) => {
-      console.log('🏠 플레이어 입장:', data);
+      console.log('🏠 플레이어 입장 데이터:', data);
+      
+      // 내 플레이어 찾기
+      const myPlayer = data.room.players.find(p => p.playerId === newSocket.id);
+      console.log('👤 내 플레이어 정보:', myPlayer);
+      
       setGameState(prev => ({
         ...prev,
         players: data.room.players,
-        currentPlayer: data.player
+        currentPlayer: myPlayer // 확실히 내 플레이어만 설정
       }));
       
-      // 맵 데이터 요청
       newSocket.emit('request-map');
     });
 
-    // 맵 데이터 수신
+    // 🎯 맵 데이터 수신 - 플레이어 정보 재확인
     newSocket.on('map-data', (data) => {
       console.log('🗺️ 맵 데이터 수신:', data);
-      setGameState(prev => ({
-        ...prev,
-        mapData: data.map,
-        players: data.allPlayers,
-        currentPlayer: prev.currentPlayer
-      }));
-    });
-
-    // 플레이어 이동
-    newSocket.on('player-moved', (data) => {
+      
       setGameState(prev => {
-        const updatedPlayers = prev.players.map(p => 
-          p.playerId === data.playerId
-            ? { ...p, position: data.position }
-            : p
-        );
-
-        const updatedCurrent = prev.currentPlayer?.playerId === data.playerId
-          ? { ...prev.currentPlayer, position: data.position }
-          : prev.currentPlayer;
-
+        // 내 플레이어 다시 찾기 (혹시 모를 상황 대비)
+        const myPlayer = data.allPlayers.find(p => p.playerId === newSocket.id);
+        console.log('🗺️ 맵 로딩 시 내 플레이어:', myPlayer);
+        
         return {
           ...prev,
-          players: updatedPlayers,
-          currentPlayer: updatedCurrent
+          mapData: data.map,
+          players: data.allPlayers,
+          currentPlayer: myPlayer || prev.currentPlayer
         };
       });
     });
 
-    // 새로운 블록 업데이트 이벤트 (내구도 시스템)
+    // 🎯 플레이어 이동 - 완전히 수정된 로직
+    newSocket.on('player-moved', (data) => {
+      console.log('🚶 이동 이벤트 수신:', {
+        movedPlayerId: data.playerId,
+        mySocketId: newSocket.id,
+        isMyMovement: data.playerId === newSocket.id
+      });
+      
+      setGameState(prev => {
+        // 🚨 중요: 내 움직임은 무시 (로컬에서 이미 처리됨)
+        if (data.playerId === newSocket.id) {
+          console.log('⏭️ 내 움직임 이벤트 무시');
+          return prev;
+        }
+        
+        // 다른 플레이어들의 움직임만 처리
+        const updatedPlayers = prev.players.map(p => 
+          p.playerId === data.playerId
+            ? { 
+                ...p, 
+                position: data.position,
+                username: data.username || p.username
+              }
+            : p
+        );
+
+        console.log('🔄 다른 플레이어 위치 업데이트:', data.playerId);
+
+        return {
+          ...prev,
+          players: updatedPlayers
+          // currentPlayer는 절대 변경하지 않음!
+        };
+      });
+    });
+
+    // 새로운 블록 업데이트 이벤트
     newSocket.on('block-updated', ({ x, y, block, playerId, newInventory }) => {
       setGameState(prev => {
         if (!prev.mapData) return prev;
 
-        // 맵 업데이트
         const newCells = prev.mapData.cells.map(row => [...row]);
         if (newCells[y] && newCells[y][x]) {
-          newCells[y][x] = block; // 새로운 블록 상태로 교체
+          newCells[y][x] = block;
         }
+
+        // 🎯 내가 채굴한 경우만 인벤토리 업데이트
+        const shouldUpdateInventory = playerId === newSocket.id;
 
         return {
           ...prev,
           mapData: { ...prev.mapData, cells: newCells },
-          currentPlayer: playerId === prev.currentPlayer?.playerId
+          currentPlayer: shouldUpdateInventory && prev.currentPlayer
             ? { ...prev.currentPlayer, inventory: newInventory }
             : prev.currentPlayer,
-          inventory: playerId === prev.currentPlayer?.playerId
+          inventory: shouldUpdateInventory
             ? convertInventoryToArray(newInventory)
             : prev.inventory
         };
       });
     });
 
-    // 채굴 에러 처리
     newSocket.on('mining-error', (data) => {
       console.log('❌ 채굴 에러:', data.message);
     });
 
-    return () => newSocket.close();
-  }, []);
+    newSocket.on('room-error', (data) => {
+      console.error('🏠 방 에러:', data.message);
+    });
+
+    return () => {
+      console.log('🔌 소켓 연결 종료');
+      newSocket.close();
+    };
+  }, [isNameSet, playerName]);
 
   // 거래 관련 이벤트 수신
   useEffect(() => {
@@ -362,14 +424,12 @@ function App() {
     };
   }, [socket]);
 
-  // 키보드 컨트롤
+  // 🎯 키보드 컨트롤 - 로컬 우선 처리
   useEffect(() => {
     const pressedKeys = new Set();
 
     const handleKeyDown = (e) => {
-      // 드래그 중이면 키보드 이벤트 무시
       if (draggedItem !== null) return;
-      
       if (!socket || !connected) return;
       if (pressedKeys.has(e.key.toLowerCase())) return;
       
@@ -384,28 +444,25 @@ function App() {
       };
 
       if (moveMap[key]) {
+        // 🎯 로컬 상태 즉시 업데이트 (부드러운 움직임)
         setGameState(prev => {
           if (!prev.currentPlayer || !prev.mapData) return prev;
           
-          // 🎯 1단계: 방향 먼저 업데이트
           const newDirection = moveMap[key];
-          
-          // 🎯 2단계: 이동 가능한지 체크
           const newPosition = calculateNewPosition(prev.currentPlayer.position, newDirection, prev.mapData);
           
-          // 위치가 바뀌지 않았다면 이동이 차단됨 (방향만 변경)
+          // 이동 불가능한 경우
           if (newPosition.x === prev.currentPlayer.position.x && 
               newPosition.y === prev.currentPlayer.position.y) {
-            console.log('🚧 이동 차단됨 - 방향만 변경');
+            console.log('🚧 로컬 이동 차단 - 방향만 변경');
             return {
               ...prev,
-              direction: newDirection, // 방향은 바뀜
-              // currentPlayer 위치는 그대로
+              direction: newDirection
             };
           }
           
-          // 이동 가능하면 위치도 업데이트
-          console.log('✅ 이동 가능');
+          // 이동 가능한 경우 - 로컬에서 즉시 반영
+          console.log(`🏃 로컬 즉시 이동: ${prev.currentPlayer.username} → (${newPosition.x}, ${newPosition.y})`);
           return {
             ...prev,
             direction: newDirection,
@@ -416,7 +473,7 @@ function App() {
           };
         });
         
-        // 서버에는 항상 이동 요청 (서버에서 최종 검증)
+        // 🎯 서버에 알림 (다른 플레이어들을 위해)
         socket.emit('move-player', moveMap[key]);
       }
 
@@ -454,6 +511,39 @@ function App() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [socket, connected, tryMineBlock, draggedItem]);
+
+  // ✅ 닉네임 입력 화면 (가장 먼저 체크)
+  if (!isNameSet) {
+    return (
+      <div className="name-input-screen">
+        <div className="name-input-container">
+          <h1>🎮 마인크래프트</h1>
+          <h2>플레이어 이름을 입력하세요</h2>
+          <input
+            type="text"
+            placeholder="닉네임 입력..."
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && playerName.trim()) {
+                setIsNameSet(true);
+              }
+            }}
+            maxLength={12}
+            autoFocus
+          />
+          <button 
+            onClick={() => {
+              if (playerName.trim()) setIsNameSet(true);
+            }}
+            disabled={!playerName.trim()}
+          >
+            게임 시작
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!connected) {
     return (
@@ -594,41 +684,86 @@ function GameMap({ mapData, players, currentPlayer, direction }) {
           ))
         )}
 
+        {/* 🎯 현재 플레이어 (내 캐릭터) */}
         <div
-          className="player-icon current-player"
+          className="player-container"
           style={{
             left: currentPlayer.position.x * cellSize,
             top: currentPlayer.position.y * cellSize,
             width: tileSize,
-            height: tileSize
+            height: tileSize,
+            position: 'absolute'
           }}
         >
+          {/* 닉네임 표시 */}
+          <div className="player-nametag" style={{
+            position: 'absolute',
+            top: -20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0,200,0,0.8)', // 내 캐릭터는 초록색
+            color: 'white',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            whiteSpace: 'nowrap',
+            zIndex: 10
+          }}>
+            {currentPlayer.username} (나)
+          </div>
+          
+          {/* 플레이어 이미지 */}
           <img
             src={getPlayerImage(direction)}
             alt="player"
             width={tileSize}
             height={tileSize}
+            style={{
+              border: '2px solid lime' // 내 캐릭터 테두리
+            }}
           />
         </div>
 
+        {/* 🎯 다른 플레이어들 */}
         {players
           .filter(p => p.playerId !== currentPlayer.playerId)
           .map(p => (
             <div
               key={p.playerId}
-              className="player-icon"
+              className="player-container"
               style={{
                 left: p.position.x * cellSize,
                 top: p.position.y * cellSize,
                 width: tileSize,
-                height: tileSize
+                height: tileSize,
+                position: 'absolute'
               }}
             >
+              {/* 다른 플레이어 닉네임 */}
+              <div className="player-nametag" style={{
+                position: 'absolute',
+                top: -20,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: p.color || 'rgba(100,100,100,0.7)',
+                color: 'white',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '10px',
+                whiteSpace: 'nowrap',
+                zIndex: 10
+              }}>
+                {p.username}
+              </div>
+              
               <img
                 src={getPlayerImage('down')}
                 alt="other player"
                 width={tileSize}
                 height={tileSize}
+                style={{
+                  border: '2px solid orange' // 다른 플레이어 테두리
+                }}
               />
             </div>
           ))
