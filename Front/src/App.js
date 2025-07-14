@@ -9,7 +9,7 @@ import './App.css';
 // 아이템 타입별 이모지 아이콘 반환 헬퍼 함수
 const getIconForItem = (type) => {
   switch (type) {
-    case 'tree': return '/images/blocks/wood.png';
+    case 'tree': return '/images/blocks/tree.png';
     case 'stone': return '/images/blocks/stone.png';
     case 'iron': return '/images/blocks/iron.png';
     case 'diamond': return '/images/blocks/dia.png';
@@ -520,6 +520,10 @@ function App() {
           onBuy={(itemName) => {
             if (socket) socket.emit('trade-item', { itemName });
           }}
+          onDragStart={handleDragStart}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
         />
       )}
 
