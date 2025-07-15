@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/ChatBox.css';
 
 const ChatBox = ({ socket, currentUser, isVisible, onToggle }) => {
@@ -55,10 +55,32 @@ const ChatBox = ({ socket, currentUser, isVisible, onToggle }) => {
     };
   }, [socket]);
 
+  // 메시지 전송
+  const handleSendMessage = useCallback(() => {
+    if (!inputText.trim() || !socket || !currentUser) return;
+
+    socket.emit('send-chat-message', {
+      message: inputText.trim(),
+      username: currentUser.name,
+      playerId: socket.id
+    });
+
+    setInputText('');
+    inputRef.current?.blur();
+    onToggle(); // 메시지 전송 후 채팅창 닫기
+  }, [inputText, socket, currentUser, onToggle]);
+
   // 엔터 키 처리
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // 다른 입력 필드에 포커스가 있으면 무시
+      if (e.target.tagName === 'INPUT' && e.target !== inputRef.current) {
+        return;
+      }
+      
       if (e.key === 'Enter') {
+        e.preventDefault(); // 기본 동작 방지
+        
         if (!isVisible) {
           // 채팅창이 닫혀있으면 열기
           onToggle();
@@ -73,30 +95,19 @@ const ChatBox = ({ socket, currentUser, isVisible, onToggle }) => {
           inputRef.current?.focus();
         }
       } else if (e.key === 'Escape') {
-        // ESC로 채팅창 닫기
-        onToggle();
-        inputRef.current?.blur();
+        e.preventDefault(); // 기본 동작 방지
+        
+        if (isVisible) {
+          // ESC로 채팅창 닫기
+          onToggle();
+          inputRef.current?.blur();
+        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isVisible, isInputFocused, onToggle]);
-
-  // 메시지 전송
-  const handleSendMessage = () => {
-    if (!inputText.trim() || !socket || !currentUser) return;
-
-    socket.emit('send-chat-message', {
-      message: inputText.trim(),
-      username: currentUser.name,
-      playerId: socket.id
-    });
-
-    setInputText('');
-    inputRef.current?.blur();
-    onToggle(); // 메시지 전송 후 채팅창 닫기
-  };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isVisible, isInputFocused, onToggle, handleSendMessage]);
 
   if (!isVisible) {
     return (
