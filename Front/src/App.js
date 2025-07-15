@@ -126,6 +126,8 @@ function App() {
 
   // 🔐 로그인 처리
   const handleLoginSuccess = ({ user, token }) => {
+    console.log('🔐 로그인 성공 처리 시작:', { user, token });
+    
     setCurrentUser(user);
     setAuthToken(token);
     setIsLoggedIn(true);
@@ -133,7 +135,8 @@ function App() {
     setIsNameSet(true);
     setUserScore(user.score || 0);
     
-    console.log('✅ 로그인 성공:', user);
+    console.log('✅ 로그인 성공 완료:', user);
+    console.log('🎯 isNameSet 설정됨, Socket 연결이 시작될 예정');
   };
 
   // 동적 API URL 결정
@@ -142,8 +145,10 @@ function App() {
     const protocol = window.location.protocol;
     
     if (hostname === 'minecrafton.store' || hostname === 'www.minecrafton.store') {
+      // 프로덕션에서는 nginx가 프록시하므로 포트 없이
       return `${protocol}//${hostname}`;
     } else {
+      // 로컬 개발환경에서는 백엔드 포트 직접 연결
       return 'http://localhost:5001';
     }
   };
@@ -167,9 +172,19 @@ function App() {
     const savedToken = localStorage.getItem('authToken');
     const savedUser = localStorage.getItem('currentUser');
     
+    // 🔍 URL에 OAuth 리다이렉션 파라미터가 있으면 localStorage 무시
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasOAuthParams = urlParams.get('token') || urlParams.get('error');
+    
+    if (hasOAuthParams) {
+      console.log('🔄 OAuth 리다이렉션 감지 - localStorage 무시');
+      return; // LoginScreen에서 처리하도록 함
+    }
+    
     if (savedToken && savedUser) {
       try {
         const user = JSON.parse(savedUser);
+        console.log('💾 저장된 로그인 정보 복원:', user.name);
         setCurrentUser(user);
         setAuthToken(savedToken);
         setIsLoggedIn(true);
@@ -392,7 +407,17 @@ function App() {
 
   // 게임 초기화
   useEffect(() => {
-    if (!isNameSet) return;
+    console.log('🔍 Socket useEffect 실행됨:', { 
+      isNameSet, 
+      playerName, 
+      authToken: !!authToken,
+      isLoggedIn 
+    });
+    
+    if (!isNameSet) {
+      console.log('⏸️ 소켓 연결 대기 중... isNameSet:', isNameSet);
+      return;
+    }
     
     console.log('🎮 게임 시작!');
     
