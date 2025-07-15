@@ -94,7 +94,7 @@ function App() {
   const [isDead, setIsDead] = useState(false);
   
   // 💬 채팅 시스템
-  const [isChatVisible, setIsChatVisible] = useState(false);
+  const [isChatVisible, setIsChatVisible] = useState(true);
   
   // 🔐 인증 시스템
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -135,7 +135,7 @@ function App() {
     setCurrentUser(user);
     setAuthToken(token);
     setIsLoggedIn(true);
-    setPlayerName(user.name);
+    setPlayerName(user.username || user.name); // username 우선 사용
     setIsNameSet(true);
     setUserScore(user.score || 0);
     
@@ -148,8 +148,53 @@ function App() {
     setIsChatVisible(prev => !prev);
   };
 
-  // 동적 API URL 결정
-  const getApiUrl = () => {
+  // 🔐 로그아웃 함수
+  const handleLogout = () => {
+    console.log('🔐 로그아웃 처리');
+    
+    // localStorage 정리
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('currentUser');
+    
+    // 소켓 연결 종료
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+    
+    // 상태 초기화
+    setCurrentUser(null);
+    setAuthToken(null);
+    setIsLoggedIn(false);
+    setPlayerName('');
+    setIsNameSet(false);
+    setUserScore(0);
+    setConnected(false);
+    setGameState({
+      mapData: null,
+      players: [],
+      currentPlayer: null,
+      selectedSlot: 0,
+      direction: 'down',
+      inventory: new Array(20).fill(null),
+      isInventoryOpen: false
+    });
+  };
+
+  // 🔍 채팅 디버깅 로그
+  useEffect(() => {
+    console.log('🔍 채팅 시스템 상태:', {
+      isChatVisible,
+      socket: !!socket,
+      connected,
+      currentUser: !!currentUser,
+      isLoggedIn,
+      hostname: window.location.hostname
+    });
+  }, [isChatVisible, socket, connected, currentUser, isLoggedIn]);
+
+  // 동적 API URL 결정 (상단으로 이동)
+  const getApiUrl = useCallback(() => {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
     
@@ -160,7 +205,7 @@ function App() {
       // 로컬 개발환경에서는 백엔드 포트 직접 연결
       return 'http://localhost:5001';
     }
-  };
+  }, []);
 
   // 🏆 랭킹 데이터 가져오기
   const fetchRanking = useCallback(async () => {
@@ -176,36 +221,63 @@ function App() {
     }
   }, []);
 
-  // 초기 로그인 상태 확인
+  // 페이지 로드 시 자동 로그인 시도
   useEffect(() => {
-    const savedToken = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('currentUser');
-    
-    // 🔍 URL에 OAuth 리다이렉션 파라미터가 있으면 localStorage 무시
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasOAuthParams = urlParams.get('token') || urlParams.get('error');
-    
-    if (hasOAuthParams) {
-      console.log('🔄 OAuth 리다이렉션 감지 - localStorage 무시');
-      return; // LoginScreen에서 처리하도록 함
-    }
-    
-    if (savedToken && savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        console.log('💾 저장된 로그인 정보 복원:', user.name);
-        setCurrentUser(user);
-        setAuthToken(savedToken);
-        setIsLoggedIn(true);
-        setPlayerName(user.name);
-        setIsNameSet(true);
-        setUserScore(user.score || 0);
-      } catch (error) {
-        console.error('저장된 로그인 정보 복원 실패:', error);
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('currentUser');
+    const tryAutoLogin = async () => {
+      const savedToken = localStorage.getItem('authToken');
+      const savedUser = localStorage.getItem('currentUser');
+      
+      if (savedToken && savedUser) {
+        try {
+          console.log('🔄 저장된 토큰으로 자동 로그인 시도');
+          
+          const apiUrl = getApiUrl();
+          const response = await fetch(`${apiUrl}/auth/verify`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: savedToken }),
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            console.log('✅ 자동 로그인 성공:', data.user.username);
+            
+            // 사용자 정보 업데이트 (서버에서 받은 최신 정보 사용)
+            const updatedUser = {
+              id: data.user.id,
+              username: data.user.username,
+              email: data.user.email,
+              score: data.user.score
+            };
+            
+            localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+            
+            setCurrentUser(updatedUser);
+            setAuthToken(savedToken);
+            setIsLoggedIn(true);
+            setPlayerName(updatedUser.username);
+            setIsNameSet(true);
+            setUserScore(updatedUser.score);
+            
+          } else {
+            console.log('❌ 토큰 만료 또는 유효하지 않음 - 로그인 화면으로 이동');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+          }
+        } catch (error) {
+          console.error('자동 로그인 실패:', error);
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('currentUser');
+        }
+      } else {
+        console.log('🔄 저장된 로그인 정보 없음 - 로그인 화면 표시');
       }
-    }
+    };
+    
+    tryAutoLogin();
   }, []);
 
   // 주기적으로 랭킹 업데이트
@@ -957,6 +1029,10 @@ function App() {
         <img src="/images/blocks/craft.png" alt="상점" style={{ width: 48, height: 48 }} />
       </button>
 
+      <button className="logout-button" onClick={handleLogout}>
+        🔐 로그아웃
+      </button>
+
       <HealthBar health={gameState.currentPlayer?.health} maxHealth={20} />
 
       <div className="phase-indicator">
@@ -1055,14 +1131,14 @@ function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
           {/* 닉네임 표시 */}
           <div className="player-nametag" style={{
             position: 'absolute',
-            top: -20,
+            top: -18,
             left: '50%',
             transform: 'translateX(-50%)',
-            background: 'rgba(0,200,0,0.8)', // 내 캐릭터는 초록색
+            background: 'rgba(0,200,0,0.5)', // 투명도 조정 (0.8 → 0.5)
             color: 'white',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontSize: '10px',
+            padding: '1px 4px',
+            borderRadius: '3px',
+            fontSize: '8px', // 크기 조정 (10px → 8px)
             whiteSpace: 'nowrap',
             zIndex: 10
           }}>
@@ -1099,14 +1175,14 @@ function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
               {/* 다른 플레이어 닉네임 */}
               <div className="player-nametag" style={{
                 position: 'absolute',
-                top: -20,
+                top: -18,
                 left: '50%',
                 transform: 'translateX(-50%)',
-                background: p.color || 'rgba(100,100,100,0.7)',
+                background: p.color ? `${p.color}80` : 'rgba(100,100,100,0.5)', // 투명도 조정
                 color: 'white',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontSize: '10px',
+                padding: '1px 4px',
+                borderRadius: '3px',
+                fontSize: '8px', // 크기 조정 (10px → 8px)
                 whiteSpace: 'nowrap',
                 zIndex: 10
               }}>

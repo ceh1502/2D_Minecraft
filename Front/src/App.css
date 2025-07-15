@@ -196,6 +196,27 @@ body {
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+/* 로그아웃 버튼 - 우상단 */
+.logout-button {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  background: rgba(255, 0, 0, 0.7);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  z-index: 1000;
+  transition: background 0.3s ease;
+  backdrop-filter: blur(5px);
+}
+
+.logout-button:hover {
+  background: rgba(255, 0, 0, 0.9);
+}
+
 /* 컨트롤 가이드 - 우상단 */
 .controls-guide {
   position: fixed;
