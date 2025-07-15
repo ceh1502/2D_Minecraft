@@ -30,11 +30,15 @@ const LoginScreen = ({ onLoginSuccess }) => {
         // URL에서 파라미터 제거
         window.history.replaceState({}, document.title, window.location.pathname);
         
+        console.log('✅ OAuth 로그인 성공:', user);
+        
         // 로그인 성공 콜백 호출
         onLoginSuccess({ token, user });
       } catch (err) {
         console.error('사용자 정보 파싱 에러:', err);
         setError('로그인 정보 처리 중 오류가 발생했습니다.');
+        // URL에서 파라미터 제거
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
   }, [onLoginSuccess]);

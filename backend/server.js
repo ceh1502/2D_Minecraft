@@ -218,6 +218,30 @@ io.on('connection', (socket) => {
       socket.join(roomId);
       
       console.log(`✅ ${username} (${socket.id})님이 ${roomId} 방에 입장했습니다.`);
+      
+      // 새 플레이어에게 기존 플레이어들 정보 전송
+      const existingPlayers = room.players.filter(p => p.playerId !== socket.id);
+      if (existingPlayers.length > 0) {
+        console.log(`📤 기존 플레이어 ${existingPlayers.length}명 정보를 새 플레이어에게 전송`);
+        socket.emit("existing-players", existingPlayers);
+      }
+      
+      // 새 플레이어에게 방 정보 전송
+      console.log('📤 room-joined 이벤트 전송');
+      socket.emit("room-joined", {
+        success: true,
+        roomId: room.roomId,
+        playerCount: room.players.length,
+        phase: room.phase,
+        yourPlayer: {
+          playerId: player.playerId,
+          username: player.username,
+          position: player.position,
+          color: player.color,
+          health: player.health
+        }
+      });
+
       console.log('현재 방 플레이어 수:', room.players.length);
       
       // 새 플레이어 입장 알림 (모든 플레이어에게)
@@ -235,6 +259,12 @@ io.on('connection', (socket) => {
           playerCount: room.players.length,
           phase: room.phase
         }
+      });
+
+      // 💬 입장 시스템 메시지 전송
+      io.to(roomId).emit('system-message', {
+        message: `${username}님이 게임에 참가했습니다.`,
+        timestamp: new Date().toISOString()
       });
 
     } else {
@@ -703,6 +733,24 @@ socket.on('move-player', (direction) => {
     socket.emit('player-restarted', { player });
   });
 
+  // 💬 채팅 메시지 전송
+  socket.on('send-chat-message', (data) => {
+    const { message, username, playerId } = data;
+    
+    console.log(`💬 채팅 메시지: ${username} -> ${message}`);
+    
+    const player = players.get(socket.id);
+    if (!player) return;
+    
+    // 같은 방의 모든 플레이어에게 메시지 전송
+    io.to(player.roomId).emit('chat-message', {
+      message: message,
+      username: username,
+      playerId: playerId,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     console.log(`👋 플레이어 연결 해제: ${socket.id}`);
@@ -724,6 +772,12 @@ socket.on('move-player', (direction) => {
             playerCount: room.players.length,
             phase: room.phase
           }
+        });
+        
+        // 💬 퇴장 시스템 메시지 전송
+        io.to(player.roomId).emit('system-message', {
+          message: `${player.username}님이 게임을 떠났습니다.`,
+          timestamp: new Date().toISOString()
         });
         
         console.log(`📢 ${player.username}님이 게임을 떠났습니다.`);

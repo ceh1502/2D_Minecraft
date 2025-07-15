@@ -6,10 +6,18 @@
       "Bash(cat:*)",
       "Bash(node:*)",
       "Bash(npm start)",
+<<<<<<< HEAD
       "Bash(npm run build:*)",
       "Bash(ssh:*)",
       "Bash(ping:*)",
       "Bash(scp:*)"
+=======
+      "Bash(git switch:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(git reset:*)"
+>>>>>>> 806603b627c60d2c5145564e9b21fb6ecb2202cf
     ],
     "deny": []
   }
