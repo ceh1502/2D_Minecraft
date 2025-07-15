@@ -10,8 +10,13 @@ const Player = sequelize.define('Player', {
   googleId: {
     type: DataTypes.STRING,
     unique: true,
-    allowNull: false,
+    allowNull: true,
     comment: 'Google OAuth ID'
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: '일반 로그인 비밀번호 (해싱됨)'
   },
   email: {
     type: DataTypes.STRING,

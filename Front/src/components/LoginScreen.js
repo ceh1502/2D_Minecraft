@@ -1,86 +1,138 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import '../styles/LoginScreen.css';
 
 const LoginScreen = ({ onLoginSuccess }) => {
+  const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
 
-  useEffect(() => {
-    // URL에서 토큰과 사용자 정보 확인 (OAuth 리다이렉트 후)
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const userParam = urlParams.get('user');
-    const errorParam = urlParams.get('error');
-
-    if (errorParam) {
-      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
-      // URL에서 에러 파라미터 제거
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-
-    if (token && userParam) {
-      try {
-        const user = JSON.parse(decodeURIComponent(userParam));
-        
-        // 토큰과 사용자 정보를 로컬스토리지에 저장
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('currentUser', JSON.stringify(user));
-        
-        // URL에서 파라미터 제거
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        console.log('✅ OAuth 로그인 성공:', user);
-        
-        // 로그인 성공 콜백 호출
-        onLoginSuccess({ token, user });
-      } catch (err) {
-        console.error('사용자 정보 파싱 에러:', err);
-        setError('로그인 정보 처리 중 오류가 발생했습니다.');
-        // URL에서 파라미터 제거
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    }
-  }, [onLoginSuccess]);
-
-  // OAuth 사용 가능 여부 확인
-  const isOAuthAvailable = () => {
-    const currentHost = window.location.hostname;
-    return (
-      currentHost === 'localhost' || 
-      currentHost === '127.0.0.1' || 
-      currentHost === 'minecrafton.store' || currentHost === 'www.minecrafton.store'
-    );
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handleGoogleLogin = () => {
-    if (!isOAuthAvailable()) {
-      setError('Google OAuth는 localhost 또는 minecrafton.store에서만 사용 가능합니다.');
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!formData.username || !formData.password) {
+      setError('사용자명과 비밀번호를 모두 입력해주세요.');
       return;
     }
     
     setLoading(true);
     setError('');
     
-    // 동적 OAuth URL 결정
-    const getOAuthURL = () => {
-      const currentHost = window.location.hostname;
-      const protocol = window.location.protocol;
+    try {
+      // 동적 API URL 결정
+      const getApiURL = () => {
+        const currentHost = window.location.hostname;
+        const protocol = window.location.protocol;
+        
+        if (currentHost === 'minecrafton.store' || currentHost === 'www.minecrafton.store') {
+          return `${protocol}//${currentHost}/api`;
+        } else {
+          return 'http://localhost:5001/api';
+        }
+      };
       
-      if (currentHost === 'minecrafton.store' || currentHost === 'www.minecrafton.store') {
-        // 프로덕션 환경 - 도메인과 같은 서버 사용
-        return `${protocol}//${currentHost}/auth/google`;
+      const response = await fetch(`${getApiURL()}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        // 로그인 성공
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        onLoginSuccess({ token: data.token, user: data.user });
       } else {
-        // 로컬 개발 환경
-        return 'http://localhost:5001/auth/google';
+        setError(data.error || '로그인에 실패했습니다.');
       }
-    };
+    } catch (error) {
+      console.error('로그인 에러:', error);
+      setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    if (!formData.username || !formData.email || !formData.password || !formData.confirmPassword) {
+      setError('모든 필드를 입력해주세요.');
+      return;
+    }
     
-    const oauthURL = getOAuthURL();
-    console.log('🔗 OAuth URL:', oauthURL);
+    if (formData.password !== formData.confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
     
-    // Google OAuth 로그인 페이지로 이동
-    window.location.href = oauthURL;
+    if (formData.password.length < 6) {
+      setError('비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      // 동적 API URL 결정
+      const getApiURL = () => {
+        const currentHost = window.location.hostname;
+        const protocol = window.location.protocol;
+        
+        if (currentHost === 'minecrafton.store' || currentHost === 'www.minecrafton.store') {
+          return `${protocol}//${currentHost}/api`;
+        } else {
+          return 'http://localhost:5001/api';
+        }
+      };
+      
+      const response = await fetch(`${getApiURL()}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          password: formData.password
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        // 회원가입 성공, 자동 로그인
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        onLoginSuccess({ token: data.token, user: data.user });
+      } else {
+        setError(data.error || '회원가입에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('회원가입 에러:', error);
+      setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGuestLogin = () => {
@@ -108,26 +160,85 @@ const LoginScreen = ({ onLoginSuccess }) => {
           <p>2D 마인크래프트 멀티플레이어 게임</p>
         </div>
 
-        <div className="login-options">
-          <button 
-            className={`google-login-btn ${!isOAuthAvailable() ? 'disabled' : ''}`}
-            onClick={handleGoogleLogin}
-            disabled={loading || !isOAuthAvailable()}
-            title={!isOAuthAvailable() ? 'Google OAuth는 localhost 또는 minecrafton.store에서만 사용 가능' : 'Google 계정으로 로그인'}
-          >
-            <img 
-              src="/images/icons/google-icon.png" 
-              alt="Google" 
-              className="google-icon"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
-            <span>
-              {isOAuthAvailable() ? 'Google로 로그인' : 'Google로 로그인 (도메인 제한)'}
-            </span>
-            {loading && <div className="loading-spinner"></div>}
-          </button>
+        <div className="login-form">
+          <div className="form-tabs">
+            <button 
+              className={`tab-btn ${!isRegistering ? 'active' : ''}`}
+              onClick={() => setIsRegistering(false)}
+              disabled={loading}
+            >
+              로그인
+            </button>
+            <button 
+              className={`tab-btn ${isRegistering ? 'active' : ''}`}
+              onClick={() => setIsRegistering(true)}
+              disabled={loading}
+            >
+              회원가입
+            </button>
+          </div>
+
+          <form onSubmit={isRegistering ? handleRegister : handleLogin}>
+            <div className="form-group">
+              <input
+                type="text"
+                name="username"
+                placeholder="사용자명"
+                value={formData.username}
+                onChange={handleInputChange}
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {isRegistering && (
+              <div className="form-group">
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="이메일"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="form-group">
+              <input
+                type="password"
+                name="password"
+                placeholder="비밀번호"
+                value={formData.password}
+                onChange={handleInputChange}
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {isRegistering && (
+              <div className="form-group">
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  placeholder="비밀번호 확인"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  required
+                />
+              </div>
+            )}
+
+            <button 
+              type="submit"
+              className="submit-btn"
+              disabled={loading}
+            >
+              {loading ? '처리 중...' : (isRegistering ? '회원가입' : '로그인')}
+            </button>
+          </form>
 
           <div className="divider">
             <span>또는</span>
@@ -154,30 +265,9 @@ const LoginScreen = ({ onLoginSuccess }) => {
             <li>실시간 멀티플레이어</li>
             <li>블록 채굴 및 건설</li>
             <li>밤에 등장하는 몬스터</li>
-            <li>랭킹 시스템 (게스트도 가능!)</li>
+            <li>랭킹 시스템</li>
             <li>아이템 상점</li>
           </ul>
-          
-          <div className="oauth-notice">
-            <h4>📝 참고사항</h4>
-            {isOAuthAvailable() ? (
-              <>
-                <p>Google 로그인을 사용하려면 Google Cloud Console에서 OAuth 설정이 필요합니다.</p>
-                <p style={{marginTop: '8px', fontSize: '13px', color: '#4285f4'}}>
-                  ✅ 지원 도메인: localhost, minecrafton.store
-                </p>
-                <p style={{marginTop: '8px', fontSize: '12px', color: '#ccc'}}>
-                  설정 방법: <code>backend/DOMAIN_OAUTH_SETUP.md</code> 참조
-                </p>
-              </>
-            ) : (
-              <>
-                <p>현재 환경에서는 Google OAuth를 사용할 수 없습니다.</p>
-                <p>지원 도메인: localhost, minecrafton.store</p>
-              </>
-            )}
-            <p style={{marginTop: '10px'}}><strong>게스트로 플레이</strong>하면 모든 기능을 체험할 수 있습니다!</p>
-          </div>
         </div>
 
         <div className="controls-info">
