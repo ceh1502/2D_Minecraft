@@ -5,7 +5,11 @@
       "Bash(chmod:*)",
       "Bash(cat:*)",
       "Bash(node:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(npm run build:*)",
+      "Bash(ssh:*)",
+      "Bash(ping:*)",
+      "Bash(scp:*)"
     ],
     "deny": []
   }
