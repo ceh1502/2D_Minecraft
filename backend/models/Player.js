@@ -1,86 +1,66 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Player = sequelize.define('Player', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  googleId: {
-    type: DataTypes.STRING,
+const playerSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
     unique: true,
-    allowNull: false,
-    comment: 'Google OAuth ID'
+    trim: true
   },
   email: {
-    type: DataTypes.STRING,
+    type: String,
+    required: true,
     unique: true,
-    allowNull: false,
-    validate: {
-      isEmail: true
-    }
-  },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  profilePicture: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: 'Google 프로필 이미지 URL'
+    trim: true,
+    lowercase: true
   },
   score: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    comment: '좀비 킬 점수'
+    type: Number,
+    default: 0
   },
   gamesPlayed: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    comment: '플레이한 게임 수'
+    type: Number,
+    default: 0
   },
   lastPlayed: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    comment: '마지막 플레이 날짜'
+    type: Date,
+    default: Date.now
+  },
+  inventory: {
+    type: Object,
+    default: {}
+  },
+  position: {
+    x: { type: Number, default: 25 },
+    y: { type: Number, default: 25 }
+  },
+  health: {
+    type: Number,
+    default: 20
   }
 }, {
-  tableName: 'players',
-  indexes: [
-    {
-      fields: ['googleId']
-    },
-    {
-      fields: ['email']
-    },
-    {
-      fields: ['score'],
-      name: 'score_index'
-    }
-  ]
+  timestamps: true
 });
 
 // 클래스 메서드
-Player.getTopPlayers = async function(limit = 10) {
-  return await Player.findAll({
-    order: [['score', 'DESC']],
-    limit: limit,
-    attributes: ['id', 'name', 'profilePicture', 'score', 'gamesPlayed']
-  });
+playerSchema.statics.getTopPlayers = async function(limit = 10) {
+  return await this.find({})
+    .sort({ score: -1 })
+    .limit(limit)
+    .select('username score gamesPlayed');
 };
 
 // 인스턴스 메서드
-Player.prototype.addScore = async function(points = 1) {
+playerSchema.methods.addScore = async function(points = 1) {
   this.score += points;
   await this.save();
   return this.score;
 };
 
-Player.prototype.incrementGamesPlayed = async function() {
+playerSchema.methods.incrementGamesPlayed = async function() {
   this.gamesPlayed += 1;
   this.lastPlayed = new Date();
   await this.save();
 };
 
-module.exports = Player;
+module.exports = mongoose.model('Player', playerSchema);

@@ -7,11 +7,13 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const session = require('express-session');
-const passport = require('./config/passport');
-const { sequelize, testConnection } = require('./config/database');
+const connectDB = require('./config/database');
 const Player = require('./models/Player');
+const User = require('./models/User');
 const authRoutes = require('./routes/auth');
 const rankingRoutes = require('./routes/ranking');
+const weatherRoutes = require('./routes/weather');
+const weatherService = require('./services/weatherService');
 const MapGenerator = require('./utils/mapGenerator');
 const MonsterManager = require('./utils/monsterManager');
 const { v4: uuidv4 } = require('uuid');
@@ -42,16 +44,13 @@ app.use(session({
   cookie: { secure: false }
 }));
 
-// Passport 초기화
-app.use(passport.initialize());
-app.use(passport.session());
-
 // 정적 파일 제공
 app.use(express.static('../Front/build'));
 
 // 라우터 설정
 app.use('/auth', authRoutes);
 app.use('/api/ranking', rankingRoutes);
+app.use('/api/weather', weatherRoutes);
 
 // Socket.io 설정
 const io = socketIo(server, {
@@ -933,20 +932,20 @@ async function initializeServer() {
   gameRooms.clear();
   players.clear();
   
-  // 데이터베이스 연결 및 테이블 생성
+  // MongoDB 연결 (선택사항)
   try {
-    await testConnection();
-    await sequelize.sync({ alter: true }); // 테이블 구조 업데이트
-    console.log('✅ 데이터베이스 테이블 동기화 완료');
+    await connectDB();
+    console.log('✅ MongoDB 연결 및 모델 준비 완료');
   } catch (error) {
-    console.error('❌ 데이터베이스 초기화 실패:', error);
+    console.error('❌ MongoDB 초기화 실패:', error);
+    console.log('⚠️  MongoDB 없이 게스트 모드로 실행합니다.');
   }
   
   console.log('🧹 ================================');
   console.log('🔄 서버 데이터 완전 초기화 완료!');
   console.log('🗑️ 모든 방 삭제됨');
   console.log('👥 모든 플레이어 삭제됨');
-  console.log('💾 데이터베이스 준비 완료');
+  console.log('💾 MongoDB 준비 완료');
   console.log('🧹 ================================');
 }
 
