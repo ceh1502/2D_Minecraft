@@ -753,8 +753,18 @@ function App() {
       if (!socket || !connected) return;
       if (pressedKeys.has(e.key.toLowerCase())) return;
       
+      // 채팅 입력 중일 때는 게임 키 입력 무시
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       const key = e.key.toLowerCase();
       pressedKeys.add(key);
+      
+      // 기본 동작 방지 (스크롤, 새로고침 등)
+      if (['w', 'a', 's', 'd', 'j', 'k', 'l', 'e', '1', '2', '3', '4', '5'].includes(key)) {
+        e.preventDefault();
+      }
 
       const moveMap = {
         w: 'up',
@@ -828,7 +838,18 @@ function App() {
     };
 
     const handleKeyUp = (e) => {
-      pressedKeys.delete(e.key.toLowerCase());
+      // 채팅 입력 중일 때는 게임 키 입력 무시
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      const key = e.key.toLowerCase();
+      pressedKeys.delete(key);
+      
+      // 기본 동작 방지
+      if (['w', 'a', 's', 'd', 'j', 'k', 'l', 'e', '1', '2', '3', '4', '5'].includes(key)) {
+        e.preventDefault();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -878,7 +899,6 @@ function App() {
     <div
       className="game-container"
       id="game-root"
-      tabIndex={0}
       style={{ outline: 'none' }}
     >
       <div className="game-view">

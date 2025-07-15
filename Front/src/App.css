@@ -20,6 +20,14 @@ body {
   overflow: hidden;
 }
 
+.game-container:focus {
+  outline: none !important;
+}
+
+.game-container:active {
+  outline: none !important;
+}
+
 /* 드래그 앤 드롭 스타일 */
 .inventory-slot.has-item {
   background: rgba(255, 255, 255, 0.05);

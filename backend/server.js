@@ -1,3 +1,4 @@
+
 // 🔧 환경변수를 가장 먼저 로드
 require('dotenv').config();
 
@@ -44,6 +45,9 @@ app.use(session({
 // Passport 초기화
 app.use(passport.initialize());
 app.use(passport.session());
+
+// 정적 파일 제공
+app.use(express.static('../Front/build'));
 
 // 라우터 설정
 app.use('/auth', authRoutes);
