@@ -3,11 +3,21 @@
   top: 80px;
   left: 20px;
   display: flex;
+  flex-direction: column;
   gap: 2px;
   z-index: 100;
+}
+
+.health-row {
+  display: flex;
+  gap: 2px;
 }
 
 .heart-icon {
   width: 20px;
   height: 20px;
+}
+
+.bonus-heart {
+  filter: hue-rotate(90deg) brightness(1.2);
 }

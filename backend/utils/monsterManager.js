@@ -46,21 +46,22 @@ class MonsterManager {
     }
   }
 
-  attackPlayers() {  
+  attackPlayers() {
     for (const monster of this.monsters.values()) {
-      for (const player of this.players) {
+      for (const player of this.playersMap.values()) { // 맵의 값들을 순회
         const dx = Math.abs(monster.position.x - player.position.x);
         const dy = Math.abs(monster.position.y - player.position.y);
         const distance = dx + dy;
-  
-        console.log(`📏 ${monster.type}(${monster.position.x},${monster.position.y}) → ${player.username}(${player.position.x},${player.position.y}) 거리: ${distance}`);
-  
+
         if (distance <= 1) {
+          // 💥 공격 이벤트 발생
+          this.io.emit('monster-attacking', { monsterId: monster.id });
+
           player.health -= monster.damage;
           if (player.health < 0) player.health = 0;
-  
+
           console.log(`💥 ${monster.type}이(가) ${player.username}을(를) 공격! 데미지: ${monster.damage.toFixed(1)} → 체력: ${player.health.toFixed(1)}`);
-  
+
           this.io.to(player.playerId).emit('player-damaged', {
             damage: monster.damage,
             newHealth: player.health

@@ -59,7 +59,11 @@ function InventoryGrid({ inventory, selectedSlot, onSlotSelect, onDragStart, onD
                   <div
                     className="draggable-item"
                     draggable={true}
-                    onDragStart={(e) => onDragStart(e, item, index)}
+                    onDragStart={(e) => {
+                      const itemData = JSON.stringify({ item, from: 'inventory', index });
+                      e.dataTransfer.setData('application/json', itemData);
+                      onDragStart(e, item, index);
+                    }}
                     onDragEnd={onDragEnd}
                     style={{
                       width: '100%',
@@ -97,18 +101,57 @@ function InventoryGrid({ inventory, selectedSlot, onSlotSelect, onDragStart, onD
 
 
 
-function InventoryModal({ inventory, onClose, onDragStart, onDrop, onDragOver, onDragEnd }) {
+function InventoryModal({ inventory, equippedArmor, onClose, onDragStart, onDrop, onDragOver, onDragEnd, onEquip }) {
+  const armorSlots = ['helmet', 'chest', 'leggings', 'boots'];
+
+  const handleDropOnArmorSlot = (e, slotType) => {
+    e.preventDefault();
+    const itemData = e.dataTransfer.getData('application/json');
+    if (!itemData) return;
+
+    const { item } = JSON.parse(itemData);
+
+    if (item && item.name.includes(slotType)) {
+      onEquip(item, slotType);
+    } else {
+      console.log(`Cannot equip ${item.name} in ${slotType} slot.`);
+    }
+  };
+
   return (
     <div className="inventory-modal-backdrop" onClick={onClose}>
       <div className="inventory-modal" onClick={(e) => e.stopPropagation()}>
         <div className="inventory-layout">
-          <div className="player-avatar">
-            <div className="avatar-box">
-              <img 
-                src="/images/characters/steve.gif"
-                alt="avatar"
-                height={108}
-              />
+          <div className="player-gear">
+            <div className="player-avatar">
+              <div className="avatar-box">
+                <img 
+                  src="/images/characters/steve.gif"
+                  alt="avatar"
+                  height={108}
+                />
+              </div>
+            </div>
+            <div className="armor-slots">
+              {armorSlots.map(slotType => (
+                <div 
+                  key={slotType}
+                  className="armor-slot"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleDropOnArmorSlot(e, slotType)}
+                >
+                  {equippedArmor && equippedArmor[slotType] ? (
+                    <img 
+                      src={equippedArmor[slotType].icon} 
+                      alt={equippedArmor[slotType].name}
+                      width={24}
+                      height={24}
+                    />
+                  ) : (
+                    <div className="armor-slot-placeholder">{slotType.charAt(0).toUpperCase()}</div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 

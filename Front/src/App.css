@@ -234,6 +234,37 @@ body {
   gap: 24px;
 }
 
+.player-gear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.armor-slots {
+  display: flex;
+  gap: 8px;
+}
+
+.armor-slot {
+  width: 50px;
+  height: 50px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.armor-slot:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #FFD700;
+}
+
 .player-avatar {
   background: rgba(255, 255, 255, 0.1);
   width: 120px;
@@ -448,4 +479,95 @@ body {
   font-weight: bold;
   text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
   border: 1px solid rgba(255,255,255,0.3);
+}
+
+/* 피격 효과 */
+.game-container.shake {
+  animation: shake 0.2s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+  75% { transform: translateX(-5px); }
+}
+
+.player-damaged {
+  filter: brightness(1.5) sepia(1) hue-rotate(-15deg);
+  transition: filter 0.1s ease-in-out;
+}
+
+/* 공격 모션 */
+.player-attacking {
+  animation: attack-motion 0.3s ease-in-out;
+}
+
+@keyframes attack-motion {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 🗡️ 플레이어 도구 스타일 */
+.player-tool {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: transform 0.1s ease-out;
+  transform-origin: center;
+}
+
+/* 방향별 도구 위치/회전 */
+.player-tool.direction-up {
+  transform: translateY(-50%) rotate(0deg);
+}
+.player-tool.direction-down {
+  transform: translateY(50%) rotate(180deg);
+}
+.player-tool.direction-left {
+  transform: translateX(-50%) rotate(-90deg);
+}
+.player-tool.direction-right {
+  transform: translateX(50%) rotate(90deg);
+}
+
+/* 공격 애니메이션 */
+.player-tool.attack-animation {
+  animation: attack-swing 0.3s ease-in-out;
+}
+
+@keyframes attack-swing {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(45deg) scale(1.5); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+/* 좀비 공격 모션 */
+.monster-icon.attacking {
+  animation: zombie-attack 0.4s ease-in-out;
+}
+
+@keyframes zombie-attack {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.2); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.player-armor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3; /* 캐릭터보다 위에 보이도록 */
 }

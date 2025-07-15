@@ -201,11 +201,18 @@ io.on('connection', (socket) => {
         position: { x: 25, y: 25 },
         color: getRandomPlayerColor(),
         health: 20,
+        maxHealth: 20,
         inventory: { 
-          tree: 0,  // wood → tree 수정
+          tree: 0,
           stone: 0, 
           iron: 0, 
           diamond: 0
+        },
+        equippedArmor: {
+          helmet: null,
+          chest: null,
+          leggings: null,
+          boots: null,
         },
         selectedSlot: 0,
         joinedAt: new Date().toISOString()
@@ -423,7 +430,7 @@ socket.on('move-player', (direction) => {
       const getToolEfficiency = (toolType, blockType) => {
         const efficiencyMap = {
           // 맨손
-          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 1 },
+          hand: { tree: 1, stone: 0, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 1 },
           
           // 곡괭이류
           wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0, barbed_wire: 2, wooden_fence: 1 },
@@ -432,8 +439,8 @@ socket.on('move-player', (direction) => {
           diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8, barbed_wire: 12, wooden_fence: 6 },
           
           // 도끼류
-          iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 6 },
-          diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 12 },
+          iron_axe: { tree: 6, stone: 0, iron_ore: 0, diamond: 0, barbed_wire: 0, wooden_fence: 6 },
+          diamond_axe: { tree: 12, stone: 0, iron_ore: 0, diamond: 0, barbed_wire: 0, wooden_fence: 12 },
           
           // 검류 (기본값과 동일)
           iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0, barbed_wire: 3, wooden_fence: 2 },
@@ -627,6 +634,9 @@ socket.on('move-player', (direction) => {
     const damage = 1;
     monster.hp -= damage;
 
+    // 공격 성공 이벤트 전송
+    socket.emit('player-attack-success', { monsterId: monster.id });
+
     if (monster.hp <= 0) {
       room.monsterManager.monsters.delete(monsterId);
       console.log(`🧟 Monster ${monsterId} defeated by ${player.playerId}`);
@@ -687,20 +697,73 @@ socket.on('move-player', (direction) => {
     if (!player) return;
 
     player.health = 20;
+    player.maxHealth = 20;
     player.position = { x: 25, y: 25 };
     player.inventory = { tree: 0, stone: 0, iron: 0, diamond: 0 };
+    player.equippedArmor = { helmet: null, chest: null, leggings: null, boots: null };
 
     const room = gameRooms.get(player.roomId);
     if (room) {
       const roomPlayer = room.players.find(p => p.playerId === socket.id);
       if (roomPlayer) {
         roomPlayer.health = 20;
+        roomPlayer.maxHealth = 20;
         roomPlayer.position = { x: 25, y: 25 };
         roomPlayer.inventory = { tree: 0, stone: 0, iron: 0, diamond: 0 };
+        roomPlayer.equippedArmor = { helmet: null, chest: null, leggings: null, boots: null };
       }
     }
 
     socket.emit('player-restarted', { player });
+  });
+
+  socket.on('equip-armor', ({ itemName, slotType }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    // Unequip the current item in the slot, if any
+    const currentItem = player.equippedArmor[slotType];
+    if (currentItem) {
+      player.inventory[currentItem.name] = (player.inventory[currentItem.name] || 0) + 1;
+    }
+
+    // Equip the new item
+    player.equippedArmor[slotType] = { name: itemName, icon: `/images/items/${itemName}.png` };
+    player.inventory[itemName] -= 1;
+
+    // Recalculate max health
+    let bonusHealth = 0;
+    const armorHealth = {
+      // 여기에 갑옷 종류별 체력 증가량을 설정하세요.
+      // 예: iron_helmet: 2,
+      iron_helmet: 2, 
+      iron_chest: 4, 
+      iron_leggings: 3, 
+      iron_boots: 1,
+      diamond_helmet: 4, 
+      diamond_chest: 7, 
+      diamond_leggings: 6, 
+      diamond_boots: 3,
+    };
+
+    for (const armor of Object.values(player.equippedArmor)) {
+      if (armor) {
+        bonusHealth += armorHealth[armor.name] || 0;
+      }
+    }
+    
+    player.maxHealth = 20 + bonusHealth;
+    player.health = Math.min(player.health + (armorHealth[itemName] || 0), player.maxHealth);
+
+    io.to(player.roomId).emit('player-updated', {
+      playerId: socket.id,
+      updated: {
+        inventory: player.inventory,
+        equippedArmor: player.equippedArmor,
+        health: player.health,
+        maxHealth: player.maxHealth,
+      }
+    });
   });
 
   // 연결 해제

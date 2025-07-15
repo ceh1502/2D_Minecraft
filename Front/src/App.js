@@ -91,6 +91,15 @@ function App() {
   const [monsters, setMonsters] = useState([]);
   const [phase, setPhase] = useState('day');
   const [isDead, setIsDead] = useState(false);
+  const [isDamaged, setIsDamaged] = useState(false);
+  const [isAttacking, setIsAttacking] = useState(false);
+  const [attackingMonsterId, setAttackingMonsterId] = useState(null);
+  const [equippedArmor, setEquippedArmor] = useState({
+    helmet: null,
+    chest: null,
+    leggings: null,
+    boots: null,
+  });
   
   // 🔐 인증 시스템
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -401,6 +410,10 @@ function App() {
     const targetMonster = monsters.find(m => m.position.x === targetX && m.position.y === targetY);
 
     if (targetMonster) {
+      // 공격 애니메이션 트리거
+      setIsAttacking(true);
+      setTimeout(() => setIsAttacking(false), 300); // 0.3초 지속
+
       socket.emit('attack-monster', { monsterId: targetMonster.id });
     }
   }, [socket, connected]);
@@ -636,6 +649,30 @@ function App() {
       }));
     });
 
+    newSocket.on('monster-attacking', ({ monsterId }) => {
+      setAttackingMonsterId(monsterId);
+      setTimeout(() => setAttackingMonsterId(null), 400); // 애니메이션 시간에 맞춰 초기화
+    });
+
+    newSocket.on('player-updated', ({ playerId, updated }) => {
+      if (playerId === newSocket.id) {
+        setGameState(prev => ({
+          ...prev,
+          inventory: convertInventoryToArray(updated.inventory),
+          currentPlayer: {
+            ...prev.currentPlayer,
+            ...updated
+          }
+        }));
+        setEquippedArmor(updated.equippedArmor);
+      } else {
+        setGameState(prev => ({
+          ...prev,
+          players: prev.players.map(p => p.playerId === playerId ? { ...p, ...updated } : p)
+        }));
+      }
+    });
+
     newSocket.on('player-damaged', ({ newHealth }) => {
       if (newHealth <= 0) {
         setIsDead(true);
@@ -647,6 +684,10 @@ function App() {
           health: newHealth
         }
       }));
+
+      // 피격 효과
+      setIsDamaged(true);
+      setTimeout(() => setIsDamaged(false), 200);
     });
 
     newSocket.on('player-restarted', (data) => {
@@ -736,6 +777,12 @@ function App() {
   }, [socket]);
 
   // 🎯 키보드 컨트롤 - 로컬 우선 처리
+  const handleEquipArmor = useCallback((item, slotType) => {
+    if (socket) {
+      socket.emit('equip-armor', { itemName: item.name, slotType });
+    }
+  }, [socket]);
+
   useEffect(() => {
     const pressedKeys = new Set();
 
@@ -867,7 +914,7 @@ function App() {
 
   return (
     <div
-      className="game-container"
+      className={`game-container ${isDamaged ? 'shake' : ''} ${phase === 'night' ? 'night' : ''}`}
       id="game-root"
       tabIndex={0}
       style={{ outline: 'none' }}
@@ -879,6 +926,11 @@ function App() {
           monsters={monsters}
           currentPlayer={gameState.currentPlayer}
           direction={gameState.direction}
+          isDamaged={isDamaged}
+          isAttacking={isAttacking}
+          inventory={gameState.inventory}
+          selectedSlot={gameState.selectedSlot}
+          attackingMonsterId={attackingMonsterId}
         />
       </div>
 
@@ -896,6 +948,7 @@ function App() {
       {gameState.isInventoryOpen && (
         <InventoryModal
           inventory={gameState.inventory}
+          equippedArmor={equippedArmor}
           onClose={() =>
             setGameState(prev => ({ ...prev, isInventoryOpen: false }))
           }
@@ -903,6 +956,7 @@ function App() {
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
+          onEquip={handleEquipArmor}
         />
       )}
 
@@ -928,7 +982,10 @@ function App() {
         <img src="/images/blocks/craft.png" alt="상점" style={{ width: 48, height: 48 }} />
       </button>
 
-      <HealthBar health={gameState.currentPlayer?.health} maxHealth={20} />
+      <HealthBar 
+        health={gameState.currentPlayer?.health ?? 20} 
+        maxHealth={gameState.currentPlayer?.maxHealth ?? 20} 
+      />
 
       <div className="phase-indicator">
         {phase === 'day' ? '☀️' : '🌙'}
@@ -944,10 +1001,18 @@ function App() {
   );
 }
 
-function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
+function GameMap({ mapData, players, monsters, currentPlayer, direction, isDamaged, isAttacking, inventory, selectedSlot, attackingMonsterId }) {
   const [zoomLevel, setZoomLevel] = useState(2.5);
   
   if (!mapData || !currentPlayer) return null;
+
+  // Get selected tool
+  const selectedItem = inventory?.[selectedSlot];
+  const isTool = selectedItem && (
+    selectedItem.name.includes('pickaxe') ||
+    selectedItem.name.includes('sword') ||
+    selectedItem.name.includes('axe')
+  );
 
   const tileSize = 20;
   const gap = 0;
@@ -1038,10 +1103,27 @@ function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
             alt="player"
             width={tileSize}
             height={tileSize}
+            className={`${isDamaged ? 'player-damaged' : ''} ${isAttacking ? 'player-attacking' : ''}`}
             style={{
-              border: '2px solid lime' // 내 캐릭터 테두리
+              border: '2px solid lime', // 내 캐릭터 테두리
+              position: 'relative',
+              zIndex: 2
             }}
           />
+          
+          {/* 🗡️ 들고 있는 도구 */}
+          {isTool && (
+            <img
+              src={getIconForItem(selectedItem.name)}
+              alt="tool"
+              className={`player-tool direction-${direction} ${isAttacking ? 'attack-animation' : ''}`}
+              style={{
+                width: tileSize,
+                height: tileSize,
+              }}
+            />
+          )}
+
         </div>
 
         {/* 🎯 다른 플레이어들 */}
@@ -1092,7 +1174,7 @@ function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
         {monsters.map(m => (
           <div
             key={m.id}
-            className="monster-icon"
+            className={`monster-icon ${attackingMonsterId === m.id ? 'attacking' : ''}`}
             style={{
               left: m.position.x * cellSize,
               top: m.position.y * cellSize,
