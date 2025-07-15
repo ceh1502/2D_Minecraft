@@ -8,7 +8,9 @@
       "Bash(npm start)",
       "Bash(git switch:*)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(git reset:*)"
     ],
     "deny": []
   }

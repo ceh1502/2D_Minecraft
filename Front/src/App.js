@@ -5,6 +5,7 @@ import ShopModal from './components/ShopModal';
 import HealthBar from './components/HealthBar';
 import LoginScreen from './components/LoginScreen';
 import RankingBoard from './components/RankingBoard';
+import ChatBox from './components/ChatBox';
 import './App.css';
 
 // 🔧 상단으로 빼낸 공통 함수들
@@ -92,6 +93,9 @@ function App() {
   const [phase, setPhase] = useState('day');
   const [isDead, setIsDead] = useState(false);
   
+  // 💬 채팅 시스템
+  const [isChatVisible, setIsChatVisible] = useState(false);
+  
   // 🔐 인증 시스템
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -137,6 +141,11 @@ function App() {
     
     console.log('✅ 로그인 성공 완료:', user);
     console.log('🎯 isNameSet 설정됨, Socket 연결이 시작될 예정');
+  };
+
+  // 💬 채팅 토글 함수
+  const toggleChat = () => {
+    setIsChatVisible(prev => !prev);
   };
 
   // 동적 API URL 결정
@@ -939,6 +948,14 @@ function App() {
         currentUser={currentUser}
         ranking={ranking}
         isVisible={true}
+      />
+
+      {/* 💬 채팅 시스템 */}
+      <ChatBox 
+        socket={socket}
+        currentUser={currentUser}
+        isVisible={isChatVisible}
+        onToggle={toggleChat}
       />
     </div>
   );

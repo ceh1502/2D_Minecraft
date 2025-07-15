@@ -261,6 +261,12 @@ io.on('connection', (socket) => {
         }
       });
 
+      // 💬 입장 시스템 메시지 전송
+      io.to(roomId).emit('system-message', {
+        message: `${username}님이 게임에 참가했습니다.`,
+        timestamp: new Date().toISOString()
+      });
+
     } else {
       console.log('❌ 방을 찾을 수 없음:', roomId);
       console.log('📋 현재 방 목록:', Array.from(gameRooms.keys()));
@@ -727,6 +733,24 @@ socket.on('move-player', (direction) => {
     socket.emit('player-restarted', { player });
   });
 
+  // 💬 채팅 메시지 전송
+  socket.on('send-chat-message', (data) => {
+    const { message, username, playerId } = data;
+    
+    console.log(`💬 채팅 메시지: ${username} -> ${message}`);
+    
+    const player = players.get(socket.id);
+    if (!player) return;
+    
+    // 같은 방의 모든 플레이어에게 메시지 전송
+    io.to(player.roomId).emit('chat-message', {
+      message: message,
+      username: username,
+      playerId: playerId,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     console.log(`👋 플레이어 연결 해제: ${socket.id}`);
@@ -748,6 +772,12 @@ socket.on('move-player', (direction) => {
             playerCount: room.players.length,
             phase: room.phase
           }
+        });
+        
+        // 💬 퇴장 시스템 메시지 전송
+        io.to(player.roomId).emit('system-message', {
+          message: `${player.username}님이 게임을 떠났습니다.`,
+          timestamp: new Date().toISOString()
         });
         
         console.log(`📢 ${player.username}님이 게임을 떠났습니다.`);
