@@ -13,7 +13,9 @@
       "Bash(git reset:*)",
       "Bash(npm run build:*)",
       "Bash(PORT=3001 npm start)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
