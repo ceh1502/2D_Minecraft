@@ -462,9 +462,56 @@ function App() {
         // 맵 데이터 요청
         console.log('🗺️ 맵 데이터 요청');
         newSocket.emit('request-map');
-      } else {
-        // 다른 플레이어가 입장한 경우
+      } else if (data.player) {
+        // 다른 플레이어가 입장한 경우 - 게임 상태에 추가
         console.log('👥 다른 플레이어 입장:', data.player);
+        
+        setGameState(prev => {
+          // 이미 존재하는 플레이어인지 확인
+          const existingIndex = prev.players.findIndex(p => p.playerId === data.player.playerId);
+          
+          if (existingIndex === -1) {
+            // 새로운 플레이어 추가
+            return {
+              ...prev,
+              players: [...prev.players, data.player]
+            };
+          } else {
+            // 기존 플레이어 정보 업데이트
+            const updatedPlayers = [...prev.players];
+            updatedPlayers[existingIndex] = { ...updatedPlayers[existingIndex], ...data.player };
+            return {
+              ...prev,
+              players: updatedPlayers
+            };
+          }
+        });
+      }
+    });
+
+    // 🎯 기존 플레이어들 정보 받기 (새로 입장할 때)
+    newSocket.on('existing-players', (existingPlayers) => {
+      console.log('👥 기존 플레이어들:', existingPlayers);
+      
+      setGameState(prev => ({
+        ...prev,
+        players: existingPlayers
+      }));
+    });
+
+    // 🎯 방 입장 완료 이벤트
+    newSocket.on('room-joined', (data) => {
+      console.log('🏠 방 입장 완료:', data);
+      
+      if (data.success && data.yourPlayer) {
+        setGameState(prev => ({
+          ...prev,
+          currentPlayer: data.yourPlayer
+        }));
+        
+        // 맵 데이터 요청
+        console.log('🗺️ 맵 데이터 요청');
+        newSocket.emit('request-map');
       }
     });
 
