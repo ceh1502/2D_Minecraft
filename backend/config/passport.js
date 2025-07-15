@@ -45,37 +45,41 @@ console.log('- CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? '✅ 설정됨' : '�
 console.log('- CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? '✅ 설정됨' : '❌ 미설정');
 console.log('- CALLBACK_URL:', getCallbackURL());
 
-// Google OAuth 전략
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: getCallbackURL()
-}, async (accessToken, refreshToken, profile, done) => {
-  try {
-    // 기존 플레이어 찾기
-    let player = await Player.findOne({ where: { googleId: profile.id } });
-    
-    if (player) {
-      // 기존 플레이어 정보 업데이트
-      player.name = profile.displayName;
-      player.email = profile.emails[0].value;
-      player.profilePicture = profile.photos[0].value;
-      await player.save();
-    } else {
-      // 새 플레이어 생성
-      player = await Player.create({
-        googleId: profile.id,
-        name: profile.displayName,
-        email: profile.emails[0].value,
-        profilePicture: profile.photos[0].value
-      });
+// Google OAuth 전략 (필요시에만 활성화)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: getCallbackURL()
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      // 기존 플레이어 찾기
+      let player = await Player.findOne({ where: { googleId: profile.id } });
+      
+      if (player) {
+        // 기존 플레이어 정보 업데이트
+        player.name = profile.displayName;
+        player.email = profile.emails[0].value;
+        player.profilePicture = profile.photos[0].value;
+        await player.save();
+      } else {
+        // 새 플레이어 생성
+        player = await Player.create({
+          googleId: profile.id,
+          name: profile.displayName,
+          email: profile.emails[0].value,
+          profilePicture: profile.photos[0].value
+        });
+      }
+      
+      return done(null, player);
+    } catch (error) {
+      return done(error, null);
     }
-    
-    return done(null, player);
-  } catch (error) {
-    return done(error, null);
-  }
-}));
+  }));
+} else {
+  console.log('🔧 Google OAuth 설정이 없어 비활성화됨');
+}
 
 passport.serializeUser((player, done) => {
   done(null, player.id);
