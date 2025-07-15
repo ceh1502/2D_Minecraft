@@ -5,7 +5,10 @@
       "Bash(chmod:*)",
       "Bash(cat:*)",
       "Bash(node:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(git switch:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
