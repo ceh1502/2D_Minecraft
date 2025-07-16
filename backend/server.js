@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
         map: gameMap,
         monsterManager: new MonsterManager(gameMap, players, io),
         phase: 'day', // 'day' or 'night'
-        phaseDuration: 60 * 1000, // 1 minute per phase
+        phaseDuration: 120 * 1000, // 2 minutes per phase
         phaseTimer: null,
         createdAt: new Date().toISOString()
       };
