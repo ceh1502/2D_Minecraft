@@ -6,11 +6,11 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const session = require('express-session');
-// const passport = require('./config/passport');
-// const { connectToMongoDB } = require('./config/database');
-// const Player = require('./models/Player');
-// const authRoutes = require('./routes/auth');
-// const rankingRoutes = require('./routes/ranking');
+const passport = require('./config/passport');
+const { connectToMongoDB } = require('./config/database');
+const Player = require('./models/Player');
+const authRoutes = require('./routes/auth');
+const rankingRoutes = require('./routes/ranking');
 const MapGenerator = require('./utils/mapGenerator');
 const MonsterManager = require('./utils/monsterManager');
 const { v4: uuidv4 } = require('uuid');
@@ -42,12 +42,12 @@ app.use(session({
 }));
 
 // Passport 초기화
-// app.use(passport.initialize());
-// app.use(passport.session());
+app.use(passport.initialize());
+app.use(passport.session());
 
 // 라우터 설정
-// app.use('/api/auth', authRoutes);
-// app.use('/api/ranking', rankingRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/ranking', rankingRoutes);
 
 // Socket.io 설정
 const io = socketIo(server, {
@@ -203,7 +203,7 @@ io.on('connection', (socket) => {
         health: 20,
         maxHealth: 20,
         inventory: { 
-          tree: 0,
+          tree: 0,  // wood → tree 수정
           stone: 0, 
           iron: 0, 
           diamond: 0,
@@ -681,31 +681,52 @@ socket.on('move-player', (direction) => {
         }
       }
       
-      // 점수 처리 (게스트 전용)
-      const guestId = player.playerId;
-      let guestData = guestRanking.get(guestId);
-      
-      if (!guestData) {
-        guestData = {
-          id: guestId,
-          name: player.username,
-          profilePicture: '/images/characters/avatar_down.png',
-          score: 0,
-          isGuest: true
-        };
+      // 점수 처리 (DB 사용자 또는 게스트)
+      if (player.dbPlayerId) {
+        // 데이터베이스 사용자
+        Player.findByPk(player.dbPlayerId).then(dbPlayer => {
+          if (dbPlayer) {
+            dbPlayer.addScore(10).then(newScore => {
+              console.log(`🎯 ${player.username} (DB) 점수 증가: ${newScore}점 (+10)`);
+              
+              socket.emit('score-updated', {
+                newScore: newScore,
+                pointsAdded: 10
+              });
+              
+              broadcastRanking(player.roomId);
+            });
+          }
+        }).catch(err => {
+          console.error('❌ 점수 업데이트 에러:', err);
+        });
+      } else {
+        // 게스트 사용자
+        const guestId = player.playerId;
+        let guestData = guestRanking.get(guestId);
+        
+        if (!guestData) {
+          guestData = {
+            id: guestId,
+            name: player.username,
+            profilePicture: '/images/characters/avatar_down.png',
+            score: 0,
+            isGuest: true
+          };
+        }
+        
+        guestData.score += 10;
+        guestRanking.set(guestId, guestData);
+        
+        console.log(`🎯 ${player.username} (게스트) 점수 증가: ${guestData.score}점 (+10)`);
+        
+        socket.emit('score-updated', {
+          newScore: guestData.score,
+          pointsAdded: 10
+        });
+        
+        broadcastRanking(player.roomId);
       }
-      
-      guestData.score += 10;
-      guestRanking.set(guestId, guestData);
-      
-      console.log(`🎯 ${player.username} (게스트) 점수 증가: ${guestData.score}점 (+10)`);
-      
-      socket.emit('score-updated', {
-        newScore: guestData.score,
-        pointsAdded: 10
-      });
-      
-      broadcastRanking(player.roomId);
       
       // 인벤토리 업데이트 전송
       io.to(player.roomId).emit('player-updated', {
@@ -964,22 +985,35 @@ setInterval(() => {
 
 // 유틸 함수들
 
-// 랭킹 브로드캐스트 함수 (게스트 전용)
+// 랭킹 브로드캐스트 함수
 async function broadcastRanking(roomId) {
   try {
-    // 게스트 플레이어 랭킹
-    const guestRankingArray = Array.from(guestRanking.values())
+    // 데이터베이스 플레이어
+    const topPlayers = await Player.getTopPlayers(10);
+    const dbRanking = topPlayers.map(player => ({
+      id: player.id,
+      name: player.name,
+      profilePicture: player.profilePicture,
+      score: player.score,
+      isGuest: false
+    }));
+    
+    // 게스트 플레이어
+    const guestRankingArray = Array.from(guestRanking.values());
+    
+    // 통합 랭킹
+    const combinedRanking = [...dbRanking, ...guestRankingArray]
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
     
     io.to(roomId).emit('ranking-updated', {
-      ranking: guestRankingArray.map((p, index) => ({
+      ranking: combinedRanking.map((p, index) => ({
         rank: index + 1,
         id: p.id,
         name: p.name,
         profilePicture: p.profilePicture,
         score: p.score,
-        isGuest: true
+        isGuest: p.isGuest || false
       }))
     });
   } catch (error) {
@@ -1060,29 +1094,29 @@ async function initializeServer() {
   gameRooms.clear();
   players.clear();
   
-  // 데이터베이스 연결 및 테이블 생성 (주석 처리)
-  // try {
-  //   await connectToMongoDB(); // MongoDB 연결
-  //   console.log('✅ 데이터베이스 테이블 동기화 완료');
-  // } catch (error) {
-  //   console.error('❌ 데이터베이스 초기화 실패:', error);
-  // }
+  // 데이터베이스 연결 및 테이블 생성
+  try {
+    await connectToMongoDB(); // MongoDB 연결
+    console.log('✅ 데이터베이스 테이블 동기화 완료');
+  } catch (error) {
+    console.error('❌ 데이터베이스 초기화 실패:', error);
+  }
   
   console.log('🧹 ================================');
   console.log('🔄 서버 데이터 완전 초기화 완료!');
   console.log('🗑️ 모든 방 삭제됨');
   console.log('👥 모든 플레이어 삭제됨');
-  // console.log('💾 데이터베이스 준비 완료');
+  console.log('💾 데이터베이스 준비 완료');
   console.log('🧹 ================================');
 }
 
-server.listen(PORT, 'localhost', async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   // 🔄 서버 시작 시 초기화 실행
   await initializeServer();
   
   console.log('🚀 ================================');
   console.log(`🎮 Minecraft Game Server Started!`);
-  console.log(`� Local: http://localhost:${PORT}`);
+  console.log(`📡 Local: http://localhost:${PORT}`);
   console.log(`🌐 Network: http://143.248.162.5:${PORT}`);
   console.log(`🔗 Health: http://143.248.162.5:${PORT}/api/health`);
   console.log('🚀 ================================');
