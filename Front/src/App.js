@@ -256,24 +256,16 @@ function App() {
 
   const handleDrop = (e, targetIndex) => {
     e.preventDefault();
-    
-    if (draggedItem === null || draggedFromIndex === null) return;
-    if (draggedFromIndex === targetIndex) {
-      setDraggedItem(null);
-      setDraggedFromIndex(null);
-      return;
-    }
-    
-    console.log(`📦 드롭: ${draggedItem.name} (${draggedFromIndex} → ${targetIndex})`);
-    
-    // 인벤토리 업데이트
-    setGameState(prev => {
-      const newInventory = [...prev.inventory];
-      const targetItem = newInventory[targetIndex];
-      
-      // 아이템 위치 교환
-      newInventory[draggedFromIndex] = targetItem;
-      newInventory[targetIndex] = draggedItem;
+    const itemDataString = e.dataTransfer.getData('application/json');
+
+    if (!itemDataString) {
+      // 기존의 draggedItem 상태를 사용하는 폴백 로직
+      if (draggedItem === null || draggedFromIndex === null) return;
+      if (draggedFromIndex === targetIndex) {
+        setDraggedItem(null);
+        setDraggedFromIndex(null);
+        return;
+      }
       
       setGameState(prev => {
         const newInventory = [...prev.inventory];
