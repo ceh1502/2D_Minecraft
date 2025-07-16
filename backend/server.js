@@ -216,7 +216,8 @@ io.on('connection', (socket) => {
           boots: null,
         },
         selectedSlot: 0,
-        joinedAt: new Date().toISOString()
+        joinedAt: new Date().toISOString(),
+        isGuest: !data.token || data.token === null // JWT 토큰이 없으면 게스트
       };
 
       room.players.push(player);
@@ -916,57 +917,17 @@ socket.on('move-player', (direction) => {
     });
   });
 
+  // 강제 연결 해제 처리 (브라우저 닫기 등)
+  socket.on('force-disconnect', (data) => {
+    console.log(`🔌 강제 연결 해제: ${socket.id}, 이유: ${data?.reason}`);
+    handlePlayerDisconnect(socket.id, data?.reason || 'force_disconnect');
+    socket.disconnect(true);
+  });
+
   // 연결 해제
-  socket.on('disconnect', () => {
-    console.log(`👋 플레이어 연결 해제: ${socket.id}`);
-    
-    const player = players.get(socket.id);
-    if (player) {
-      const room = gameRooms.get(player.roomId);
-      if (room) {
-        // 방에서 플레이어 제거
-        room.players = room.players.filter(p => p.playerId !== socket.id);
-        room.monsterManager.players = room.players; // Update monster manager's player list
-        
-        // 다른 플레이어들에게 알림
-        io.to(player.roomId).emit('player-left', {
-          playerId: socket.id,
-          username: player.username,
-          roomInfo: {
-            roomId: room.roomId,
-            playerCount: room.players.length,
-            phase: room.phase
-          }
-        });
-        
-        // 💬 퇴장 시스템 메시지 전송
-        io.to(player.roomId).emit('system-message', {
-          message: `${player.username}님이 게임을 떠났습니다.`,
-          timestamp: new Date().toISOString()
-        });
-        
-        console.log(`📢 ${player.username}님이 게임을 떠났습니다.`);
-        
-        // 방이 비었으면 삭제
-        if (room.players.length === 0) {
-          clearInterval(room.phaseTimer);
-          gameRooms.delete(player.roomId);
-          console.log(`🗑️ 빈 방 삭제: ${player.roomId}`);
-        } else {
-          // 다른 플레이어들에게 알림
-          io.to(player.roomId).emit('player-left', {
-            playerId: socket.id,
-            username: player.username,
-            roomInfo: {
-              roomId: room.roomId,
-              playerCount: room.players.length,
-              phase: room.phase
-            }
-          });
-        }
-      }
-      players.delete(socket.id);
-    }
+  socket.on('disconnect', (reason) => {
+    console.log(`👋 플레이어 연결 해제: ${socket.id}, 이유: ${reason}`);
+    handlePlayerDisconnect(socket.id, reason);
   });
 });
 
@@ -984,6 +945,57 @@ setInterval(() => {
 }, 1000);
 
 // 유틸 함수들
+
+// 플레이어 연결 해제 처리 함수
+function handlePlayerDisconnect(socketId, reason) {
+  const player = players.get(socketId);
+  if (!player) return;
+
+  const room = gameRooms.get(player.roomId);
+  if (room) {
+    // 방에서 플레이어 제거
+    room.players = room.players.filter(p => p.playerId !== socketId);
+    room.monsterManager.players = room.players; // Update monster manager's player list
+    
+    // 다른 플레이어들에게 즉시 알림
+    io.to(player.roomId).emit('player-left', {
+      playerId: socketId,
+      username: player.username,
+      roomInfo: {
+        roomId: room.roomId,
+        playerCount: room.players.length,
+        phase: room.phase
+      }
+    });
+    
+    // 💬 퇴장 시스템 메시지 전송
+    io.to(player.roomId).emit('system-message', {
+      message: `${player.username}님이 게임을 떠났습니다.`,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`📢 ${player.username}님이 게임을 떠났습니다. (이유: ${reason})`);
+    
+    // 🏆 랭킹 업데이트 (해당 플레이어를 게스트 랭킹에서 제거)
+    if (player.isGuest) {
+      guestRanking.delete(socketId);
+      console.log(`🏆 게스트 랭킹에서 ${player.username} 제거`);
+    }
+    
+    // 랭킹 업데이트 브로드캐스트
+    broadcastRanking(player.roomId);
+    
+    // 방이 비었으면 삭제
+    if (room.players.length === 0) {
+      clearInterval(room.phaseTimer);
+      gameRooms.delete(player.roomId);
+      console.log(`🗑️ 빈 방 삭제: ${player.roomId}`);
+    }
+  }
+  
+  // 플레이어 데이터 삭제
+  players.delete(socketId);
+}
 
 // 랭킹 브로드캐스트 함수
 async function broadcastRanking(roomId) {

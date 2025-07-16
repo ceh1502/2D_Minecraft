@@ -765,6 +765,18 @@ function App() {
       setRanking(ranking);
     });
 
+    // 👋 플레이어 퇴장 이벤트
+    newSocket.on('player-left', ({ playerId, username, roomInfo }) => {
+      console.log(`👋 플레이어 퇴장: ${username} (${playerId})`);
+      
+      setGameState(prev => ({
+        ...prev,
+        players: prev.players.filter(p => p.playerId !== playerId)
+      }));
+      
+      console.log(`📢 ${username}님이 게임에서 나갔습니다.`);
+    });
+
     // 방 생성 성공
     newSocket.on('room-created', (data) => {
       console.log('✅ 방 생성 성공:', data);
@@ -785,7 +797,10 @@ function App() {
 
     return () => {
       console.log('🔌 소켓 연결 종료');
-      newSocket.close();
+      if (newSocket && newSocket.connected) {
+        newSocket.emit('force-disconnect', { reason: 'component_unmount' });
+        newSocket.close();
+      }
     };
   }, [isNameSet, playerName, authToken]);
 
@@ -822,6 +837,46 @@ function App() {
     };
   }, [socket]);
 
+  // 🔌 브라우저 창 닫기 감지 (플레이어 즉시 제거)
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      if (socket && socket.connected) {
+        console.log('🔌 브라우저 창 닫기 감지 - 즉시 연결 해제');
+        // 동기식으로 서버에 즉시 알림
+        socket.emit('force-disconnect', { reason: 'page_unload' });
+        socket.disconnect();
+      }
+    };
+
+    const handleUnload = () => {
+      if (socket && socket.connected) {
+        console.log('🔌 페이지 언로드 - 즉시 연결 해제');
+        socket.emit('force-disconnect', { reason: 'page_unload' });
+        socket.disconnect();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && socket && socket.connected) {
+        console.log('🔌 페이지 숨김 감지 - 연결 해제');
+        socket.emit('force-disconnect', { reason: 'page_hidden' });
+        socket.disconnect();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [socket]);
+
   // 🎯 키보드 컨트롤 - 로컬 우선 처리
   const handleEquipArmor = useCallback((item, slotType) => {
     if (socket) {
@@ -843,16 +898,28 @@ function App() {
 
   useEffect(() => {
     const pressedKeys = new Set();
+    const keyTimestamps = new Map();
+    const DEBOUNCE_DELAY = 50; // 50ms 디바운스
 
     const handleKeyDown = (e) => {
       if (draggedItem !== null) return;
       if (!socket || !connected) return;
-      if (pressedKeys.has(e.key.toLowerCase())) return;
+      
+      const key = e.key.toLowerCase();
+      const now = Date.now();
+      
+      // 키가 이미 눌려있거나 너무 빠르게 연타되는 경우 무시
+      if (pressedKeys.has(key)) return;
+      
+      // 디바운스 체크
+      const lastPressed = keyTimestamps.get(key);
+      if (lastPressed && now - lastPressed < DEBOUNCE_DELAY) return;
+      
       // 채팅 입력 중이면 게임 조작키 비활성화
       if (isChatFocused) return;
       
-      const key = e.key.toLowerCase();
       pressedKeys.add(key);
+      keyTimestamps.set(key, now);
 
       const moveMap = {
         w: 'up',
@@ -862,25 +929,33 @@ function App() {
       };
 
       if (moveMap[key]) {
-        // 🎯 로컬 상태 즉시 업데이트 (부드러운 움직임)
+        // 🎯 안전한 상태 체크 후 업데이트
+        const currentState = gameStateRef.current;
+        if (!currentState.currentPlayer || !currentState.mapData) {
+          console.log('⚠️ 게임 상태 불완전 - 이동 무시');
+          return;
+        }
+        
+        const newDirection = moveMap[key];
+        const newPosition = calculateNewPosition(currentState.currentPlayer.position, newDirection, currentState.mapData);
+        
+        // 이동 불가능한 경우 - 방향만 변경
+        if (newPosition.x === currentState.currentPlayer.position.x && 
+            newPosition.y === currentState.currentPlayer.position.y) {
+          console.log('🚧 로컬 이동 차단 - 방향만 변경');
+          setGameState(prev => ({
+            ...prev,
+            direction: newDirection
+          }));
+          return;
+        }
+        
+        // 이동 가능한 경우 - 안전하게 업데이트
+        console.log(`🏃 로컬 즉시 이동: ${currentState.currentPlayer.username} → (${newPosition.x}, ${newPosition.y})`);
         setGameState(prev => {
+          // 다시 한 번 안전 체크
           if (!prev.currentPlayer || !prev.mapData) return prev;
           
-          const newDirection = moveMap[key];
-          const newPosition = calculateNewPosition(prev.currentPlayer.position, newDirection, prev.mapData);
-          
-          // 이동 불가능한 경우
-          if (newPosition.x === prev.currentPlayer.position.x && 
-              newPosition.y === prev.currentPlayer.position.y) {
-            console.log('🚧 로컬 이동 차단 - 방향만 변경');
-            return {
-              ...prev,
-              direction: newDirection
-            };
-          }
-          
-          // 이동 가능한 경우 - 로컬에서 즉시 반영
-          console.log(`🏃 로컬 즉시 이동: ${prev.currentPlayer.username} → (${newPosition.x}, ${newPosition.y})`);
           return {
             ...prev,
             direction: newDirection,
@@ -1083,7 +1158,17 @@ function App() {
 function GameMap({ mapData, players, monsters, currentPlayer, direction, isDamaged, isAttacking, inventory, selectedSlot, attackingMonsterId }) {
   const [zoomLevel, setZoomLevel] = useState(2.5);
   
-  if (!mapData || !currentPlayer) return null;
+  // 안전한 렌더링 체크
+  if (!mapData || !currentPlayer || !mapData.cells || !currentPlayer.position) {
+    console.log('⚠️ GameMap 렌더링 중단 - 필수 데이터 누락');
+    return (
+      <div className="game-map-wrapper">
+        <div className="loading-screen">
+          <p>맵 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Get selected tool
   const selectedItem = inventory?.[selectedSlot];
