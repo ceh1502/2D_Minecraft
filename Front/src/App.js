@@ -745,6 +745,31 @@ function App() {
     };
   }, [socket]);
 
+  // 🔌 브라우저 창 닫기 감지 (플레이어 즉시 제거)
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      if (socket && socket.connected) {
+        console.log('🔌 브라우저 창 닫기 감지 - 소켓 연결 종료');
+        socket.disconnect();
+      }
+    };
+
+    const handleUnload = () => {
+      if (socket && socket.connected) {
+        console.log('🔌 페이지 언로드 - 소켓 연결 종료');
+        socket.disconnect();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleUnload);
+    };
+  }, [socket]);
+
   // 🎯 키보드 컨트롤 - 로컬 우선 처리
   useEffect(() => {
     const pressedKeys = new Set();
