@@ -1,25 +1,40 @@
-const { Sequelize } = require('sequelize');
-const path = require('path');
+const mongoose = require('mongoose');
 
-// SQLite 데이터베이스 연결 설정
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: path.join(__dirname, '..', 'database.sqlite'),
-  logging: console.log, // SQL 쿼리 로깅 (개발 시에만)
-  define: {
-    timestamps: true, // createdAt, updatedAt 자동 생성
-    underscored: false, // camelCase 사용
-  }
-});
+// MongoDB 연결 설정
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/minecraft2d';
 
-// 데이터베이스 연결 테스트
-async function testConnection() {
+// MongoDB 연결
+async function connectToMongoDB() {
   try {
-    await sequelize.authenticate();
-    console.log('✅ 데이터베이스 연결 성공');
+    await mongoose.connect(MONGODB_URI, {
+      
+      
+    });
+    console.log('✅ MongoDB 연결 성공');
   } catch (error) {
-    console.error('❌ 데이터베이스 연결 실패:', error);
+    console.error('❌ MongoDB 연결 실패:', error);
+    process.exit(1);
   }
 }
 
-module.exports = { sequelize, testConnection };
+// 연결 이벤트 리스너
+mongoose.connection.on('connected', () => {
+  console.log('🔗 Mongoose가 MongoDB에 연결되었습니다');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB 연결 오류:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('🔌 MongoDB 연결이 해제되었습니다');
+});
+
+// 프로세스 종료 시 연결 해제
+process.on('SIGINT', async () => {
+  await mongoose.connection.close();
+  console.log('👋 MongoDB 연결이 앱 종료로 인해 해제되었습니다');
+  process.exit(0);
+});
+
+module.exports = { connectToMongoDB, mongoose };

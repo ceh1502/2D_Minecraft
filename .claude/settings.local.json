@@ -1,14 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl:*)",
       "Bash(chmod:*)",
-      "Bash(cat:*)",
-      "Bash(node:*)",
+      "Bash(./deploy.sh)",
       "Bash(npm start)",
-      "Bash(git switch:*)",
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:minecrafton.store)",
+      "Bash(npm run build:*)",
+      "Bash(scp:*)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(ssh:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }

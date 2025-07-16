@@ -5,6 +5,7 @@ import ShopModal from './components/ShopModal';
 import HealthBar from './components/HealthBar';
 import LoginScreen from './components/LoginScreen';
 import RankingBoard from './components/RankingBoard';
+import ChatBox from './components/ChatBox';
 import './App.css';
 
 // 🔧 상단으로 빼낸 공통 함수들
@@ -101,6 +102,10 @@ function App() {
     boots: null,
   });
   
+  // 💬 채팅 시스템
+  const [isChatVisible, setIsChatVisible] = useState(false);
+  const [isChatFocused, setIsChatFocused] = useState(false);
+  
   // 🔐 인증 시스템
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -146,6 +151,11 @@ function App() {
     
     console.log('✅ 로그인 성공 완료:', user);
     console.log('🎯 isNameSet 설정됨, Socket 연결이 시작될 예정');
+  };
+
+  // 💬 채팅 토글 함수
+  const toggleChat = () => {
+    setIsChatVisible(prev => !prev);
   };
 
   // 동적 API URL 결정
@@ -790,6 +800,8 @@ function App() {
       if (draggedItem !== null) return;
       if (!socket || !connected) return;
       if (pressedKeys.has(e.key.toLowerCase())) return;
+      // 채팅 입력 중이면 게임 조작키 비활성화
+      if (isChatFocused) return;
       
       const key = e.key.toLowerCase();
       pressedKeys.add(key);
@@ -876,7 +888,7 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [socket, connected, tryMineBlock, tryPlaceBlock, tryAttackMonster, draggedItem]);
+  }, [socket, connected, tryMineBlock, tryPlaceBlock, tryAttackMonster, draggedItem, isChatFocused]);
 
   // 🔐 로그인 화면 (가장 먼저 체크)
   if (!isLoggedIn) {
@@ -996,6 +1008,15 @@ function App() {
         currentUser={currentUser}
         ranking={ranking}
         isVisible={true}
+      />
+
+      {/* 💬 채팅 시스템 */}
+      <ChatBox 
+        socket={socket}
+        currentUser={currentUser}
+        isVisible={isChatVisible}
+        onToggle={toggleChat}
+        onChatFocusChange={setIsChatFocused}
       />
     </div>
   );
