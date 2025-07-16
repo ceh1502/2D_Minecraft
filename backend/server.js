@@ -129,7 +129,7 @@ io.on('connection', (socket) => {
         if (newRoom.phase === 'night') {
           console.log('🌙 Night phase: Spawning monsters...');
           // Spawn monsters
-          const spawnCount = Math.floor(Math.random() * 5) + 5; // 5-9 monsters
+          const spawnCount = Math.floor(Math.random() * 6) + 15; // 15-20 monsters
           for (let i = 0; i < spawnCount; i++) {
             const { x, y } = findValidSpawn(newRoom.map, newRoom.players, newRoom.monsterManager.getMonsters());
             if (x !== -1) {
