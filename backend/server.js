@@ -7,7 +7,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const session = require('express-session');
 const passport = require('./config/passport');
-const { sequelize, testConnection } = require('./config/database');
+const { connectToMongoDB } = require('./config/database');
 const Player = require('./models/Player');
 const authRoutes = require('./routes/auth');
 const rankingRoutes = require('./routes/ranking');
@@ -931,8 +931,7 @@ async function initializeServer() {
   
   // 데이터베이스 연결 및 테이블 생성
   try {
-    await testConnection();
-    await sequelize.sync({ alter: true }); // 테이블 구조 업데이트
+    await connectToMongoDB(); // MongoDB 연결
     console.log('✅ 데이터베이스 테이블 동기화 완료');
   } catch (error) {
     console.error('❌ 데이터베이스 초기화 실패:', error);

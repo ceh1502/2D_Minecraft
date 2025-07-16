@@ -1,7 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { Op } = require('sequelize');
 const passport = require('../config/passport');
 const Player = require('../models/Player');
 const router = express.Router();
@@ -29,9 +28,7 @@ router.post('/register', async (req, res) => {
     }
     
     // 기존 사용자 확인
-    const existingPlayer = await Player.findOne({ 
-      where: { email: email } 
-    });
+    const existingPlayer = await Player.findOne({ email: email });
     
     if (existingPlayer) {
       return res.status(400).json({ error: '이미 사용 중인 이메일입니다.' });
@@ -41,8 +38,7 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // 새 플레이어 생성
-    const player = await Player.create({
-      googleId: null,
+    const player = new Player({
       email: email,
       name: username,
       password: hashedPassword,
@@ -51,10 +47,12 @@ router.post('/register', async (req, res) => {
       gamesPlayed: 0
     });
     
+    await player.save();
+    
     // JWT 토큰 생성
     const token = jwt.sign(
       { 
-        id: player.id,
+        id: player._id,
         email: player.email,
         name: player.name
       },
@@ -67,7 +65,7 @@ router.post('/register', async (req, res) => {
       message: '회원가입이 완료되었습니다.',
       token: token,
       user: {
-        id: player.id,
+        id: player._id,
         name: player.name,
         email: player.email,
         profilePicture: player.profilePicture,
@@ -94,12 +92,10 @@ router.post('/login', async (req, res) => {
     
     // 사용자 찾기 (이메일 또는 사용자명으로 로그인 가능)
     const player = await Player.findOne({ 
-      where: { 
-        [Op.or]: [
-          { email: username },
-          { name: username }
-        ]
-      } 
+      $or: [
+        { email: username },
+        { name: username }
+      ]
     });
     
     if (!player) {
@@ -120,7 +116,7 @@ router.post('/login', async (req, res) => {
     // JWT 토큰 생성
     const token = jwt.sign(
       { 
-        id: player.id,
+        id: player._id,
         email: player.email,
         name: player.name
       },
@@ -133,7 +129,7 @@ router.post('/login', async (req, res) => {
       message: '로그인이 완료되었습니다.',
       token: token,
       user: {
-        id: player.id,
+        id: player._id,
         name: player.name,
         email: player.email,
         profilePicture: player.profilePicture,
