@@ -206,7 +206,8 @@ io.on('connection', (socket) => {
           tree: 0,
           stone: 0, 
           iron: 0, 
-          diamond: 0
+          diamond: 0,
+          beef: 0
         },
         equippedArmor: {
           helmet: null,
@@ -670,6 +671,15 @@ socket.on('move-player', (direction) => {
     if (monster.hp <= 0) {
       room.monsterManager.monsters.delete(monsterId);
       console.log(`🧟 Monster ${monsterId} defeated by ${player.playerId}`);
+
+      // 🥩 아이템 드랍 로직 추가
+      if (monster.type === 'zombie') {
+        // 50% 확률로 고기 드랍
+        if (Math.random() < 0.5) {
+          player.inventory.beef = (player.inventory.beef || 0) + 1;
+          console.log(`🥩 ${player.username}이(가) 고기를 획득했습니다!`);
+        }
+      }
       
       // 점수 처리 (DB 사용자 또는 게스트)
       if (player.dbPlayerId) {
@@ -717,9 +727,46 @@ socket.on('move-player', (direction) => {
         
         broadcastRanking(player.roomId);
       }
+      
+      // 인벤토리 업데이트 전송
+      io.to(player.roomId).emit('player-updated', {
+        playerId: socket.id,
+        updated: {
+          inventory: player.inventory,
+        }
+      });
     }
 
     io.to(player.roomId).emit('monsters-updated', { monsters: room.monsterManager.getMonsters() });
+  });
+
+  socket.on('use-item', ({ itemName }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+
+    // 아이템 사용 로직
+    if (itemName === 'beef' && player.inventory.beef > 0) {
+      if (player.health < player.maxHealth) {
+        player.inventory.beef -= 1;
+        player.health = Math.min(player.maxHealth, player.health + 4); // 체력 4 회복
+
+        console.log(`🍖 ${player.username}이(가) 고기를 먹고 체력을 회복했습니다. 현재 체력: ${player.health}`);
+
+        // 클라이언트에 플레이어 상태 업데이트 전송
+        io.to(player.roomId).emit('player-updated', {
+          playerId: socket.id,
+          updated: {
+            inventory: player.inventory,
+            health: player.health,
+          }
+        });
+      } else {
+        socket.emit('action-error', { message: '체력이 이미 가득 찼습니다.' });
+      }
+    }
   });
 
   socket.on('restart-game', () => {
@@ -802,6 +849,61 @@ socket.on('move-player', (direction) => {
     
     player.maxHealth = 20 + bonusHealth;
     player.health = Math.min(player.health + (armorHealth[itemName] || 0), player.maxHealth);
+
+    io.to(player.roomId).emit('player-updated', {
+      playerId: socket.id,
+      updated: {
+        inventory: player.inventory,
+        equippedArmor: player.equippedArmor,
+        health: player.health,
+        maxHealth: player.maxHealth,
+      }
+    });
+  });
+
+  socket.on('unequip-armor', ({ slotType }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const itemToUnequip = player.equippedArmor[slotType];
+    if (!itemToUnequip) {
+      socket.emit('action-error', { message: '해당 슬롯에 착용한 아이템이 없습니다.' });
+      return;
+    }
+
+    // 인벤토리에 아이템 추가
+    player.inventory[itemToUnequip.name] = (player.inventory[itemToUnequip.name] || 0) + 1;
+    
+    // 갑옷 슬롯 비우기
+    player.equippedArmor[slotType] = null;
+
+    // 체력 재계산
+    let bonusHealth = 0;
+    const armorHealth = {
+      iron_helmet: 2, iron_chest: 4, iron_leggings: 3, iron_boots: 1,
+      diamond_helmet: 4, diamond_chest: 7, diamond_leggings: 6, diamond_boots: 3,
+    };
+
+    for (const armor of Object.values(player.equippedArmor)) {
+      if (armor) {
+        bonusHealth += armorHealth[armor.name] || 0;
+      }
+    }
+    
+    player.maxHealth = 20 + bonusHealth;
+    player.health = Math.min(player.health, player.maxHealth); // 현재 체력이 최대 체력을 넘지 않도록 조정
+
+    // 방의 플레이어 정보도 업데이트
+    const room = gameRooms.get(player.roomId);
+    if (room) {
+      const roomPlayer = room.players.find(p => p.playerId === socket.id);
+      if (roomPlayer) {
+        roomPlayer.inventory = player.inventory;
+        roomPlayer.equippedArmor = player.equippedArmor;
+        roomPlayer.health = player.health;
+        roomPlayer.maxHealth = player.maxHealth;
+      }
+    }
 
     io.to(player.roomId).emit('player-updated', {
       playerId: socket.id,
@@ -1008,13 +1110,13 @@ async function initializeServer() {
   console.log('🧹 ================================');
 }
 
-server.listen(PORT, '0.0.0.0', async () => {
+server.listen(PORT, 'localhost', async () => {
   // 🔄 서버 시작 시 초기화 실행
   await initializeServer();
   
   console.log('🚀 ================================');
   console.log(`🎮 Minecraft Game Server Started!`);
-  console.log(`📡 Local: http://localhost:${PORT}`);
+  console.log(`� Local: http://localhost:${PORT}`);
   console.log(`🌐 Network: http://143.248.162.5:${PORT}`);
   console.log(`🔗 Health: http://143.248.162.5:${PORT}/api/health`);
   console.log('🚀 ================================');

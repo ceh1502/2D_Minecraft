@@ -141,11 +141,19 @@ function InventoryModal({ inventory, equippedArmor, onClose, onDragStart, onDrop
                   onDrop={(e) => handleDropOnArmorSlot(e, slotType)}
                 >
                   {equippedArmor && equippedArmor[slotType] ? (
-                    <img 
+                    <img
+                      draggable
+                      onDragStart={(e) => {
+                        const itemData = JSON.stringify({ item: equippedArmor[slotType], from: 'armor', slotType });
+                        e.dataTransfer.setData('application/json', itemData);
+                        onDragStart(e, equippedArmor[slotType], -1);
+                      }}
+                      onDragEnd={onDragEnd}
                       src={equippedArmor[slotType].icon} 
                       alt={equippedArmor[slotType].name}
                       width={24}
                       height={24}
+                      style={{ cursor: 'grab' }}
                     />
                   ) : (
                     <div className="armor-slot-placeholder">{slotType.charAt(0).toUpperCase()}</div>

@@ -18,6 +18,7 @@ body {
   position: relative;
   background: #87CEEB;
   overflow: hidden;
+  transition: background-color 2s ease-in-out;
 }
 
 /* 드래그 앤 드롭 스타일 */
@@ -86,7 +87,7 @@ body {
   height: 100vh;
   position: relative;
   overflow: hidden;
-  background: #87CEEB;
+  background: transparent;
 }
 
 /* 맵 - 카메라 시스템 */
@@ -570,4 +571,22 @@ body {
   height: 100%;
   pointer-events: none;
   z-index: 3; /* 캐릭터보다 위에 보이도록 */
+}
+
+/* 밤 효과 */
+.game-container.night {
+  background-color: #000033; /* 어두운 밤하늘 색 */
+}
+
+.game-container.night::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 50, 0.3);
+  pointer-events: none;
+  z-index: 500;
+  transition: background-color 2s ease-in-out;
 }
