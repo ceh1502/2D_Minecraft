@@ -46,7 +46,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // 라우터 설정
-app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/ranking', rankingRoutes);
 
 // Socket.io 설정
