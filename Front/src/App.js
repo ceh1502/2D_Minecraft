@@ -42,6 +42,8 @@ const getIconForItem = (type) => {
     case 'diamond_chest': return '/images/items/diamond_chest.png';
     case 'diamond_leggings': return '/images/items/diamond_leggings.png';
     case 'diamond_boots': return '/images/items/diamond_boots.png';
+    // 🥩 고기 아이템 추가
+    case 'beef': return '/images/items/beef.png';
     default: return '❓';
   }
 };
@@ -59,30 +61,44 @@ const getPlayerImage = (direction) => {
 const PLACEABLE_BLOCKS = ['tree', 'stone', 'iron', 'diamond', 'barbed_wire', 'wooden_fence'];
 
 // 🔧 인벤토리 변환 함수 (상단으로 이동)
-const convertInventoryToArray = (inventoryObj) => {
-  const types = [
-    'tree', 'stone', 'iron', 'diamond',
-    'barbed_wire', 'wooden_fence',
-    'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe',
-    'iron_sword', 'diamond_sword',
-    'iron_axe', 'diamond_axe',
-    'iron_helmet', 'iron_chest', 'iron_leggings', 'iron_boots',
-    'diamond_helmet', 'diamond_chest', 'diamond_leggings', 'diamond_boots'
-  ];
+const convertInventoryToArray = (inventoryObj, prevInventory = []) => {
+  const newInventory = new Array(20).fill(null);
+  const itemTypesInObj = Object.keys(inventoryObj).filter(type => inventoryObj[type] > 0);
+  const processedTypes = new Set();
 
-  const flat = new Array(20).fill(null);
-  let i = 0;
-  types.forEach((type) => {
-    const count = inventoryObj[type];
-    if (count > 0 && i < 20) {
-      flat[i++] = {
-        name: type,
-        count,
-        icon: getIconForItem(type),
+  // 1. Place items that were already in the inventory, in their old positions
+  for (let i = 0; i < prevInventory.length; i++) {
+    const item = prevInventory[i];
+    if (item && inventoryObj[item.name] > 0) {
+      newInventory[i] = {
+        ...item,
+        count: inventoryObj[item.name],
       };
+      processedTypes.add(item.name);
     }
-  });
-  return flat;
+  }
+
+  // 2. Place new items in the first available slots
+  let nextSlot = 0;
+  for (const type of itemTypesInObj) {
+    if (!processedTypes.has(type)) {
+      // Find the next empty slot
+      while (newInventory[nextSlot] !== null && nextSlot < newInventory.length) {
+        nextSlot++;
+      }
+      
+      if (nextSlot < newInventory.length) {
+        newInventory[nextSlot] = {
+          name: type,
+          count: inventoryObj[type],
+          icon: getIconForItem(type),
+        };
+        processedTypes.add(type);
+      }
+    }
+  }
+
+  return newInventory;
 };
 
 function App() {
@@ -92,6 +108,15 @@ function App() {
   const [monsters, setMonsters] = useState([]);
   const [phase, setPhase] = useState('day');
   const [isDead, setIsDead] = useState(false);
+  const [isDamaged, setIsDamaged] = useState(false);
+  const [isAttacking, setIsAttacking] = useState(false);
+  const [attackingMonsterId, setAttackingMonsterId] = useState(null);
+  const [equippedArmor, setEquippedArmor] = useState({
+    helmet: null,
+    chest: null,
+    leggings: null,
+    boots: null,
+  });
   
   // 💬 채팅 시스템
   const [isChatVisible, setIsChatVisible] = useState(false);
@@ -231,30 +256,50 @@ function App() {
 
   const handleDrop = (e, targetIndex) => {
     e.preventDefault();
-    
-    if (draggedItem === null || draggedFromIndex === null) return;
-    if (draggedFromIndex === targetIndex) {
-      setDraggedItem(null);
-      setDraggedFromIndex(null);
-      return;
+    const itemDataString = e.dataTransfer.getData('application/json');
+
+    if (!itemDataString) {
+      // 기존의 draggedItem 상태를 사용하는 폴백 로직
+      if (draggedItem === null || draggedFromIndex === null) return;
+      if (draggedFromIndex === targetIndex) {
+        setDraggedItem(null);
+        setDraggedFromIndex(null);
+        return;
+      }
+      
+      setGameState(prev => {
+        const newInventory = [...prev.inventory];
+        const targetItem = newInventory[targetIndex];
+        newInventory[draggedFromIndex] = targetItem;
+        newInventory[targetIndex] = draggedItem;
+        return { ...prev, inventory: newInventory };
+      });
+
+    } else {
+      // dataTransfer를 사용하는 새로운 로직
+      const { item, from, index: fromIndex, slotType } = JSON.parse(itemDataString);
+
+      if (from === 'armor') {
+        // 갑옷 벗기: 갑옷 슬롯 -> 인벤토리
+        if (gameStateRef.current.inventory[targetIndex] === null) {
+          handleUnequipArmor(slotType);
+        }
+      } else if (from === 'inventory') {
+        // 인벤토리 내 아이템 교환
+        if (fromIndex === targetIndex) return;
+        
+        setGameState(prev => {
+          const newInventory = [...prev.inventory];
+          const sourceItem = newInventory[fromIndex];
+          const destinationItem = newInventory[targetIndex];
+          
+          newInventory[targetIndex] = sourceItem;
+          newInventory[fromIndex] = destinationItem;
+          
+          return { ...prev, inventory: newInventory };
+        });
+      }
     }
-    
-    console.log(`📦 드롭: ${draggedItem.name} (${draggedFromIndex} → ${targetIndex})`);
-    
-    // 인벤토리 업데이트
-    setGameState(prev => {
-      const newInventory = [...prev.inventory];
-      const targetItem = newInventory[targetIndex];
-      
-      // 아이템 위치 교환
-      newInventory[draggedFromIndex] = targetItem;
-      newInventory[targetIndex] = draggedItem;
-      
-      return {
-        ...prev,
-        inventory: newInventory
-      };
-    });
     
     setDraggedItem(null);
     setDraggedFromIndex(null);
@@ -411,6 +456,10 @@ function App() {
     const targetMonster = monsters.find(m => m.position.x === targetX && m.position.y === targetY);
 
     if (targetMonster) {
+      // 공격 애니메이션 트리거
+      setIsAttacking(true);
+      setTimeout(() => setIsAttacking(false), 300); // 0.3초 지속
+
       socket.emit('attack-monster', { monsterId: targetMonster.id });
     }
   }, [socket, connected]);
@@ -624,7 +673,7 @@ function App() {
             ? { ...prev.currentPlayer, inventory: newInventory }
             : prev.currentPlayer,
           inventory: shouldUpdateInventory
-            ? convertInventoryToArray(newInventory)
+            ? convertInventoryToArray(newInventory, prev.inventory)
             : prev.inventory
         };
       });
@@ -646,6 +695,11 @@ function App() {
       }));
     });
 
+    newSocket.on('monster-attacking', ({ monsterId }) => {
+      setAttackingMonsterId(monsterId);
+      setTimeout(() => setAttackingMonsterId(null), 400); // 애니메이션 시간에 맞춰 초기화
+    });
+
     newSocket.on('player-damaged', ({ newHealth }) => {
       if (newHealth <= 0) {
         setIsDead(true);
@@ -657,6 +711,10 @@ function App() {
           health: newHealth
         }
       }));
+
+      // 피격 효과
+      setIsDamaged(true);
+      setTimeout(() => setIsDamaged(false), 200);
     });
 
     newSocket.on('player-restarted', (data) => {
@@ -665,7 +723,7 @@ function App() {
         ...prev,
         currentPlayer: data.player,
         players: prev.players.map(p => p.playerId === data.player.playerId ? data.player : p),
-        inventory: convertInventoryToArray(data.player.inventory)
+        inventory: convertInventoryToArray(data.player.inventory, [])
       }));
     });
 
@@ -686,6 +744,25 @@ function App() {
     newSocket.on('ranking-updated', ({ ranking }) => {
       console.log('🏆 랭킹 업데이트:', ranking);
       setRanking(ranking);
+    });
+
+    // 🔄 플레이어 업데이트 이벤트 (아이템 사용 등)
+    newSocket.on('player-updated', ({ playerId, updated }) => {
+      if (playerId === newSocket.id) {
+        setGameState(prev => ({
+          ...prev,
+          inventory: convertInventoryToArray(updated.inventory),
+          currentPlayer: {
+            ...prev.currentPlayer,
+            ...updated
+          }
+        }));
+      } else {
+        setGameState(prev => ({
+          ...prev,
+          players: prev.players.map(p => p.playerId === playerId ? { ...p, ...updated } : p)
+        }));
+      }
     });
 
     // 방 생성 성공
@@ -723,7 +800,7 @@ function App() {
       // 예: 받은 아이템 인벤토리에 반영
       setGameState((prev) => ({
         ...prev,
-        inventory: convertInventoryToArray(data.newInventory),
+        inventory: convertInventoryToArray(data.newInventory, prev.inventory),
         currentPlayer: {
           ...prev.currentPlayer,
           inventory: data.newInventory
@@ -743,6 +820,25 @@ function App() {
       socket.off('trade-success', handleTradeSuccess);
       socket.off('trade-error', handleTradeError);
     };
+  }, [socket]);
+
+  // 🎯 키보드 컨트롤 - 로컬 우선 처리
+  const handleEquipArmor = useCallback((item, slotType) => {
+    if (socket) {
+      socket.emit('equip-armor', { itemName: item.name, slotType });
+    }
+    // 드래그 상태 초기화
+    setDraggedItem(null);
+    setDraggedFromIndex(null);
+  }, [socket]);
+
+  const handleUnequipArmor = useCallback((slotType) => {
+    if (socket) {
+      socket.emit('unequip-armor', { slotType });
+    }
+    // 드래그 상태 초기화
+    setDraggedItem(null);
+    setDraggedFromIndex(null);
   }, [socket]);
 
   // 🔌 브라우저 창 닫기 감지 (플레이어 즉시 제거)
@@ -853,6 +949,14 @@ function App() {
       if (key === 'l') {
         tryAttackMonster();
       }
+
+      // F키로 아이템 사용 (고기 먹기)
+      if (key === 'f') {
+        const selectedItem = gameStateRef.current.inventory[gameStateRef.current.selectedSlot];
+        if (selectedItem && selectedItem.name === 'beef') {
+          socket.emit('use-item', { itemName: 'beef' });
+        }
+      }
     };
 
     const handleKeyUp = (e) => {
@@ -904,7 +1008,7 @@ function App() {
 
   return (
     <div
-      className="game-container"
+      className={`game-container ${isDamaged ? 'shake' : ''} ${phase === 'night' ? 'night' : ''}`}
       id="game-root"
       tabIndex={0}
       style={{ outline: 'none' }}
@@ -916,6 +1020,12 @@ function App() {
           monsters={monsters}
           currentPlayer={gameState.currentPlayer}
           direction={gameState.direction}
+          isDamaged={isDamaged}
+          isAttacking={isAttacking}
+          inventory={gameState.inventory}
+          selectedSlot={gameState.selectedSlot}
+          attackingMonsterId={attackingMonsterId}
+          phase={phase}
         />
       </div>
 
@@ -933,6 +1043,7 @@ function App() {
       {gameState.isInventoryOpen && (
         <InventoryModal
           inventory={gameState.inventory}
+          equippedArmor={equippedArmor}
           onClose={() =>
             setGameState(prev => ({ ...prev, isInventoryOpen: false }))
           }
@@ -940,6 +1051,8 @@ function App() {
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
+          onEquip={handleEquipArmor}
+          onUnequip={handleUnequipArmor}
         />
       )}
 
@@ -958,14 +1071,17 @@ function App() {
       )}
 
       <div className="controls-guide">
-        <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J | 설치: K | 공격: L</p>
+        <p>🎮 이동: WASD | 인벤토리: 1-5 | 채굴: J | 설치: K | 공격: L | 섭취: F</p>
       </div>
 
       <button className="shop-button" onClick={() => setIsShopOpen(true)}>
         <img src="/images/blocks/craft.png" alt="상점" style={{ width: 48, height: 48 }} />
       </button>
 
-      <HealthBar health={gameState.currentPlayer?.health} maxHealth={20} />
+      <HealthBar 
+        health={gameState.currentPlayer?.health ?? 20} 
+        maxHealth={gameState.currentPlayer?.maxHealth ?? 20} 
+      />
 
       <div className="phase-indicator">
         {phase === 'day' ? '☀️' : '🌙'}
@@ -990,10 +1106,18 @@ function App() {
   );
 }
 
-function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
+function GameMap({ mapData, players, monsters, currentPlayer, direction, isDamaged, isAttacking, inventory, selectedSlot, attackingMonsterId }) {
   const [zoomLevel, setZoomLevel] = useState(2.5);
   
   if (!mapData || !currentPlayer) return null;
+
+  // Get selected tool
+  const selectedItem = inventory?.[selectedSlot];
+  const isTool = selectedItem && (
+    selectedItem.name.includes('pickaxe') ||
+    selectedItem.name.includes('sword') ||
+    selectedItem.name.includes('axe')
+  );
 
   const tileSize = 20;
   const gap = 0;
@@ -1084,10 +1208,27 @@ function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
             alt="player"
             width={tileSize}
             height={tileSize}
+            className={`${isDamaged ? 'player-damaged' : ''} ${isAttacking ? 'player-attacking' : ''}`}
             style={{
-              border: '2px solid lime' // 내 캐릭터 테두리
+              border: '2px solid lime', // 내 캐릭터 테두리
+              position: 'relative',
+              zIndex: 2
             }}
           />
+          
+          {/* 🗡️ 들고 있는 도구 */}
+          {isTool && (
+            <img
+              src={getIconForItem(selectedItem.name)}
+              alt="tool"
+              className={`player-tool direction-${direction} ${isAttacking ? 'attack-animation' : ''}`}
+              style={{
+                width: tileSize,
+                height: tileSize,
+              }}
+            />
+          )}
+
         </div>
 
         {/* 🎯 다른 플레이어들 */}
@@ -1138,7 +1279,7 @@ function GameMap({ mapData, players, monsters, currentPlayer, direction }) {
         {monsters.map(m => (
           <div
             key={m.id}
-            className="monster-icon"
+            className={`monster-icon ${attackingMonsterId === m.id ? 'attacking' : ''}`}
             style={{
               left: m.position.x * cellSize,
               top: m.position.y * cellSize,

@@ -201,11 +201,19 @@ io.on('connection', (socket) => {
         position: { x: 25, y: 25 },
         color: getRandomPlayerColor(),
         health: 20,
+        maxHealth: 20,
         inventory: { 
           tree: 0,  // wood → tree 수정
           stone: 0, 
           iron: 0, 
-          diamond: 0
+          diamond: 0,
+          beef: 0
+        },
+        equippedArmor: {
+          helmet: null,
+          chest: null,
+          leggings: null,
+          boots: null,
         },
         selectedSlot: 0,
         joinedAt: new Date().toISOString()
@@ -453,7 +461,7 @@ socket.on('move-player', (direction) => {
       const getToolEfficiency = (toolType, blockType) => {
         const efficiencyMap = {
           // 맨손
-          hand: { tree: 1, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 1 },
+          hand: { tree: 1, stone: 0, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 1 },
           
           // 곡괭이류
           wooden_pickaxe: { tree: 1, stone: 2, iron_ore: 1, diamond: 0, barbed_wire: 2, wooden_fence: 1 },
@@ -462,8 +470,8 @@ socket.on('move-player', (direction) => {
           diamond_pickaxe: { tree: 1, stone: 12, iron_ore: 12, diamond: 8, barbed_wire: 12, wooden_fence: 6 },
           
           // 도끼류
-          iron_axe: { tree: 6, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 6 },
-          diamond_axe: { tree: 12, stone: 1, iron_ore: 0, diamond: 0, barbed_wire: 1, wooden_fence: 12 },
+          iron_axe: { tree: 6, stone: 0, iron_ore: 0, diamond: 0, barbed_wire: 0, wooden_fence: 6 },
+          diamond_axe: { tree: 12, stone: 0, iron_ore: 0, diamond: 0, barbed_wire: 0, wooden_fence: 12 },
           
           // 검류 (기본값과 동일)
           iron_sword: { tree: 1, stone: 1, iron_ore: 1, diamond: 0, barbed_wire: 3, wooden_fence: 2 },
@@ -657,9 +665,21 @@ socket.on('move-player', (direction) => {
     const damage = 1;
     monster.hp -= damage;
 
+    // 공격 성공 이벤트 전송
+    socket.emit('player-attack-success', { monsterId: monster.id });
+
     if (monster.hp <= 0) {
       room.monsterManager.monsters.delete(monsterId);
       console.log(`🧟 Monster ${monsterId} defeated by ${player.playerId}`);
+
+      // 🥩 아이템 드랍 로직 추가
+      if (monster.type === 'zombie') {
+        // 50% 확률로 고기 드랍
+        if (Math.random() < 0.5) {
+          player.inventory.beef = (player.inventory.beef || 0) + 1;
+          console.log(`🥩 ${player.username}이(가) 고기를 획득했습니다!`);
+        }
+      }
       
       // 점수 처리 (DB 사용자 또는 게스트)
       if (player.dbPlayerId) {
@@ -707,9 +727,46 @@ socket.on('move-player', (direction) => {
         
         broadcastRanking(player.roomId);
       }
+      
+      // 인벤토리 업데이트 전송
+      io.to(player.roomId).emit('player-updated', {
+        playerId: socket.id,
+        updated: {
+          inventory: player.inventory,
+        }
+      });
     }
 
     io.to(player.roomId).emit('monsters-updated', { monsters: room.monsterManager.getMonsters() });
+  });
+
+  socket.on('use-item', ({ itemName }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const room = gameRooms.get(player.roomId);
+    if (!room) return;
+
+    // 아이템 사용 로직
+    if (itemName === 'beef' && player.inventory.beef > 0) {
+      if (player.health < player.maxHealth) {
+        player.inventory.beef -= 1;
+        player.health = Math.min(player.maxHealth, player.health + 4); // 체력 4 회복
+
+        console.log(`🍖 ${player.username}이(가) 고기를 먹고 체력을 회복했습니다. 현재 체력: ${player.health}`);
+
+        // 클라이언트에 플레이어 상태 업데이트 전송
+        io.to(player.roomId).emit('player-updated', {
+          playerId: socket.id,
+          updated: {
+            inventory: player.inventory,
+            health: player.health,
+          }
+        });
+      } else {
+        socket.emit('action-error', { message: '체력이 이미 가득 찼습니다.' });
+      }
+    }
   });
 
   socket.on('restart-game', () => {
@@ -717,16 +774,20 @@ socket.on('move-player', (direction) => {
     if (!player) return;
 
     player.health = 20;
+    player.maxHealth = 20;
     player.position = { x: 25, y: 25 };
     player.inventory = { tree: 0, stone: 0, iron: 0, diamond: 0 };
+    player.equippedArmor = { helmet: null, chest: null, leggings: null, boots: null };
 
     const room = gameRooms.get(player.roomId);
     if (room) {
       const roomPlayer = room.players.find(p => p.playerId === socket.id);
       if (roomPlayer) {
         roomPlayer.health = 20;
+        roomPlayer.maxHealth = 20;
         roomPlayer.position = { x: 25, y: 25 };
         roomPlayer.inventory = { tree: 0, stone: 0, iron: 0, diamond: 0 };
+        roomPlayer.equippedArmor = { helmet: null, chest: null, leggings: null, boots: null };
       }
     }
 
@@ -748,6 +809,110 @@ socket.on('move-player', (direction) => {
       username: username,
       playerId: playerId,
       timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.on('equip-armor', ({ itemName, slotType }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    // Unequip the current item in the slot, if any
+    const currentItem = player.equippedArmor[slotType];
+    if (currentItem) {
+      player.inventory[currentItem.name] = (player.inventory[currentItem.name] || 0) + 1;
+    }
+
+    // Equip the new item
+    player.equippedArmor[slotType] = { name: itemName, icon: `/images/items/${itemName}.png` };
+    player.inventory[itemName] -= 1;
+
+    // Recalculate max health
+    let bonusHealth = 0;
+    const armorHealth = {
+      // 여기에 갑옷 종류별 체력 증가량을 설정하세요.
+      // 예: iron_helmet: 2,
+      iron_helmet: 2, 
+      iron_chest: 4, 
+      iron_leggings: 3, 
+      iron_boots: 1,
+      diamond_helmet: 4, 
+      diamond_chest: 7, 
+      diamond_leggings: 6, 
+      diamond_boots: 3,
+    };
+
+    for (const armor of Object.values(player.equippedArmor)) {
+      if (armor) {
+        bonusHealth += armorHealth[armor.name] || 0;
+      }
+    }
+    
+    player.maxHealth = 20 + bonusHealth;
+    player.health = Math.min(player.health + (armorHealth[itemName] || 0), player.maxHealth);
+
+    io.to(player.roomId).emit('player-updated', {
+      playerId: socket.id,
+      updated: {
+        inventory: player.inventory,
+        equippedArmor: player.equippedArmor,
+        health: player.health,
+        maxHealth: player.maxHealth,
+      }
+    });
+  });
+
+  socket.on('unequip-armor', ({ slotType }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const itemToUnequip = player.equippedArmor[slotType];
+    if (!itemToUnequip) {
+      socket.emit('action-error', { message: '해당 슬롯에 착용한 아이템이 없습니다.' });
+      return;
+    }
+
+    // 인벤토리에 아이템 추가
+    player.inventory[itemToUnequip.name] = (player.inventory[itemToUnequip.name] || 0) + 1;
+    
+    // 갑옷 슬롯 비우기
+    player.equippedArmor[slotType] = null;
+
+    // 체력 재계산
+    let bonusHealth = 0;
+    const armorHealth = {
+      iron_helmet: 2, iron_chest: 4, iron_leggings: 3, iron_boots: 1,
+      diamond_helmet: 4, diamond_chest: 7, diamond_leggings: 6, diamond_boots: 3,
+    };
+
+    for (const armor of Object.values(player.equippedArmor)) {
+      if (armor) {
+        bonusHealth += armorHealth[armor.name] || 0;
+      }
+    }
+    
+    player.maxHealth = 20 + bonusHealth;
+    player.health = Math.min(player.health, player.maxHealth); // 현재 체력이 최대 체력을 넘지 않도록 조정
+
+    // 방의 플레이어 정보도 업데이트
+    const room = gameRooms.get(player.roomId);
+    if (room) {
+      const roomPlayer = room.players.find(p => p.playerId === socket.id);
+      if (roomPlayer) {
+        roomPlayer.inventory = player.inventory;
+        roomPlayer.equippedArmor = player.equippedArmor;
+        roomPlayer.health = player.health;
+        roomPlayer.maxHealth = player.maxHealth;
+      }
+    }
+
+    io.to(player.roomId).emit('player-updated', {
+      playerId: socket.id,
+      updated: {
+        inventory: player.inventory,
+        equippedArmor: player.equippedArmor,
+        health: player.health,
+        maxHealth: player.maxHealth,
+      }
     });
   });
 
