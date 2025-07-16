@@ -95,6 +95,7 @@ function App() {
   
   // 💬 채팅 시스템
   const [isChatVisible, setIsChatVisible] = useState(false);
+  const [isChatFocused, setIsChatFocused] = useState(false);
   
   // 🔐 인증 시스템
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -752,6 +753,8 @@ function App() {
       if (draggedItem !== null) return;
       if (!socket || !connected) return;
       if (pressedKeys.has(e.key.toLowerCase())) return;
+      // 채팅 입력 중이면 게임 조작키 비활성화
+      if (isChatFocused) return;
       
       const key = e.key.toLowerCase();
       pressedKeys.add(key);
@@ -838,7 +841,7 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [socket, connected, tryMineBlock, tryPlaceBlock, tryAttackMonster, draggedItem]);
+  }, [socket, connected, tryMineBlock, tryPlaceBlock, tryAttackMonster, draggedItem, isChatFocused]);
 
   // 🔐 로그인 화면 (가장 먼저 체크)
   if (!isLoggedIn) {
@@ -956,6 +959,7 @@ function App() {
         currentUser={currentUser}
         isVisible={isChatVisible}
         onToggle={toggleChat}
+        onChatFocusChange={setIsChatFocused}
       />
     </div>
   );

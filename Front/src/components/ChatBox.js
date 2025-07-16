@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/ChatBox.css';
 
-const ChatBox = ({ socket, currentUser, isVisible, onToggle }) => {
+const ChatBox = ({ socket, currentUser, isVisible, onToggle, onChatFocusChange }) => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isInputFocused, setIsInputFocused] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // 채팅 포커스 상태를 부모 컴포넌트에 전달
+  useEffect(() => {
+    if (onChatFocusChange) {
+      onChatFocusChange(isInputFocused);
+    }
+  }, [isInputFocused, onChatFocusChange]);
 
   // 메시지 자동 스크롤
   const scrollToBottom = () => {
@@ -66,9 +73,9 @@ const ChatBox = ({ socket, currentUser, isVisible, onToggle }) => {
     });
 
     setInputText('');
-    inputRef.current?.blur();
-    onToggle(); // 메시지 전송 후 채팅창 닫기
-  }, [inputText, socket, currentUser, onToggle]);
+    // 메시지 전송 후 채팅창을 닫지 않고 포커스 유지
+    inputRef.current?.focus();
+  }, [inputText, socket, currentUser]);
 
   // 엔터 키 처리
   useEffect(() => {
@@ -146,6 +153,12 @@ const ChatBox = ({ socket, currentUser, isVisible, onToggle }) => {
           onChange={(e) => setInputText(e.target.value)}
           onFocus={() => setIsInputFocused(true)}
           onBlur={() => setIsInputFocused(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
           placeholder="Type a message... (Enter to send, ESC to close)"
           className="chat-input"
           maxLength={100}

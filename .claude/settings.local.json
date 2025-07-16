@@ -6,7 +6,12 @@
       "Bash(npm start)",
       "Bash(npm install:*)",
       "Bash(curl:*)",
-      "WebFetch(domain:minecrafton.store)"
+      "WebFetch(domain:minecrafton.store)",
+      "Bash(npm run build:*)",
+      "Bash(scp:*)",
+      "Bash(ls:*)",
+      "Bash(ssh:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
