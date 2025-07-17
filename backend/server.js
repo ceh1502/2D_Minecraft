@@ -280,6 +280,12 @@ io.on('connection', (socket) => {
         }
       });
 
+      // 🌤️ 새 플레이어에게 현재 날씨 정보 전송
+      if (currentWeather) {
+        console.log('📤 현재 날씨 정보 전송:', currentWeather.condition);
+        socket.emit('weather-updated', { weather: currentWeather });
+      }
+
       console.log('현재 방 플레이어 수:', room.players.length);
       
       // 새 플레이어 입장 알림 (모든 플레이어에게)
