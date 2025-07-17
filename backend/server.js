@@ -106,6 +106,10 @@ io.on('connection', (socket) => {
     console.log('현재 방들:', Array.from(gameRooms.keys()));
     
     if (!gameRooms.has(roomId)) {
+      // 🏆 방 생성 시 게스트 랭킹 초기화 (새로운 게임 세션)
+      guestRanking.clear();
+      console.log('🏆 새 방 생성으로 게스트 랭킹 초기화');
+      
       // 맵 생성
       const mapGenerator = new MapGenerator(50, 50);
       const gameMap = mapGenerator.generateMap();
@@ -1000,23 +1004,28 @@ function handlePlayerDisconnect(socketId, reason) {
 // 랭킹 브로드캐스트 함수
 async function broadcastRanking(roomId) {
   try {
-    // 데이터베이스 플레이어
+    // 데이터베이스 플레이어 (점수가 0보다 큰 경우만)
     const topPlayers = await Player.getTopPlayers(10);
-    const dbRanking = topPlayers.map(player => ({
-      id: player.id,
-      name: player.name,
-      profilePicture: player.profilePicture,
-      score: player.score,
-      isGuest: false
-    }));
+    const dbRanking = topPlayers
+      .filter(player => player.score > 0) // 점수가 0인 플레이어 제외
+      .map(player => ({
+        id: player.id,
+        name: player.name,
+        profilePicture: player.profilePicture,
+        score: player.score,
+        isGuest: false
+      }));
     
-    // 게스트 플레이어
-    const guestRankingArray = Array.from(guestRanking.values());
+    // 게스트 플레이어 (점수가 0보다 큰 경우만)
+    const guestRankingArray = Array.from(guestRanking.values())
+      .filter(guest => guest.score > 0); // 점수가 0인 게스트 제외
     
     // 통합 랭킹
     const combinedRanking = [...dbRanking, ...guestRankingArray]
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
+    
+    console.log(`🏆 랭킹 브로드캐스트: DB ${dbRanking.length}명, 게스트 ${guestRankingArray.length}명, 총 ${combinedRanking.length}명`);
     
     io.to(roomId).emit('ranking-updated', {
       ranking: combinedRanking.map((p, index) => ({
@@ -1030,6 +1039,8 @@ async function broadcastRanking(roomId) {
     });
   } catch (error) {
     console.error('❌ 랭킹 브로드캐스트 에러:', error);
+    // 에러 시 빈 랭킹 전송
+    io.to(roomId).emit('ranking-updated', { ranking: [] });
   }
 }
 
@@ -1105,6 +1116,7 @@ async function initializeServer() {
   // 기존 데이터 완전 삭제
   gameRooms.clear();
   players.clear();
+  guestRanking.clear(); // 게스트 랭킹 완전 초기화
   
   // 데이터베이스 연결 및 테이블 생성
   try {
@@ -1118,6 +1130,7 @@ async function initializeServer() {
   console.log('🔄 서버 데이터 완전 초기화 완료!');
   console.log('🗑️ 모든 방 삭제됨');
   console.log('👥 모든 플레이어 삭제됨');
+  console.log('🏆 게스트 랭킹 초기화됨');
   console.log('💾 데이터베이스 준비 완료');
   console.log('🧹 ================================');
 }
