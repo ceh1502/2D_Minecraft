@@ -15,7 +15,10 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git pull:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(nproc)",
+      "Bash(timeout 15s npm start)",
+      "Bash(timeout 10s npm start)"
     ],
     "deny": []
   }

@@ -7,6 +7,7 @@ import LoginScreen from './components/LoginScreen';
 import RankingBoard from './components/RankingBoard';
 import ChatBox from './components/ChatBox';
 import './App.css';
+import './styles/Weather.css';
 
 // 🔧 상단으로 빼낸 공통 함수들
 
@@ -130,6 +131,9 @@ function App() {
   // 🏆 랭킹 시스템
   const [ranking, setRanking] = useState([]);
   const [userScore, setUserScore] = useState(0);
+  
+  // 🌤️ 날씨 시스템
+  const [currentWeather, setCurrentWeather] = useState(null);
   
   // ✅ 닉네임 시스템 (호환성 유지)
   const [playerName, setPlayerName] = useState('');
@@ -603,6 +607,12 @@ function App() {
     newSocket.on('map-data', (data) => {
       console.log('🗺️ 맵 데이터 수신:', data);
       
+      // 날씨 정보 설정
+      if (data.weather) {
+        console.log('🌤️ 초기 날씨 설정:', data.weather);
+        setCurrentWeather(data.weather);
+      }
+      
       setGameState(prev => {
         // 내 플레이어 다시 찾기 (혹시 모를 상황 대비)
         const myPlayer = data.allPlayers.find(p => p.playerId === newSocket.id);
@@ -775,6 +785,12 @@ function App() {
       }));
       
       console.log(`📢 ${username}님이 게임에서 나갔습니다.`);
+    });
+
+    // 🌤️ 날씨 업데이트 이벤트
+    newSocket.on('weather-updated', ({ weather }) => {
+      console.log('🌤️ 날씨 업데이트:', weather);
+      setCurrentWeather(weather);
     });
 
     // 방 생성 성공
@@ -1057,7 +1073,7 @@ function App() {
 
   return (
     <div
-      className={`game-container ${isDamaged ? 'shake' : ''} ${phase === 'night' ? 'night' : ''}`}
+      className={`game-container ${isDamaged ? 'shake' : ''} ${phase === 'night' ? 'night' : ''} ${currentWeather ? `weather-${currentWeather.condition}` : ''}`}
       id="game-root"
       tabIndex={0}
       style={{ outline: 'none' }}
@@ -1077,6 +1093,26 @@ function App() {
           phase={phase}
         />
       </div>
+
+      {/* 🌤️ 날씨 정보 표시 */}
+      {currentWeather && (
+        <div className="weather-info">
+          <div className="weather-icon">
+            {currentWeather.condition === 'sunny' && '☀️'}
+            {currentWeather.condition === 'cloudy' && '⛅'}
+            {currentWeather.condition === 'overcast' && '☁️'}
+            {currentWeather.condition === 'rainy' && '🌧️'}
+            {currentWeather.condition === 'stormy' && '⛈️'}
+            {currentWeather.condition === 'snowy' && '❄️'}
+            {currentWeather.condition === 'foggy' && '🌫️'}
+          </div>
+          <div className="weather-details">
+            <div className="weather-condition">{currentWeather.description}</div>
+            <div className="weather-temp">{currentWeather.temp}°C</div>
+            <div className="weather-city">{currentWeather.city}</div>
+          </div>
+        </div>
+      )}
 
       <div className="inventory-bar">
         <Hotbar 

@@ -13,6 +13,7 @@ const authRoutes = require('./routes/auth');
 const rankingRoutes = require('./routes/ranking');
 const MapGenerator = require('./utils/mapGenerator');
 const MonsterManager = require('./utils/monsterManager');
+const WeatherService = require('./utils/weatherService');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -64,6 +65,10 @@ const players = new Map();
 const guestRanking = new Map(); // 게스트 사용자 랭킹 (메모리 기반)
 global.guestRanking = guestRanking; // 라우터에서 접근 가능하도록
 
+// 날씨 서비스 초기화
+const weatherService = new WeatherService();
+let currentWeather = null;
+
 // API 라우트
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -71,8 +76,28 @@ app.get('/api/health', (req, res) => {
     message: '🎮 Minecraft Game Server Running!',
     timestamp: new Date().toISOString(),
     activeRooms: gameRooms.size,
-    activePlayers: players.size
+    activePlayers: players.size,
+    weather: currentWeather
   });
+});
+
+// 날씨 API 엔드포인트
+app.get('/api/weather', async (req, res) => {
+  try {
+    const city = req.query.city || process.env.DEFAULT_CITY || 'Seoul';
+    const weather = await weatherService.getWeather(city);
+    res.json({
+      success: true,
+      weather: weather
+    });
+  } catch (error) {
+    console.error('❌ 날씨 API 에러:', error);
+    res.status(500).json({
+      success: false,
+      error: '날씨 정보를 가져올 수 없습니다.',
+      weather: weatherService.getDefaultWeather()
+    });
+  }
 });
 
 // 랜덤 플레이어 색상 함수
@@ -364,7 +389,8 @@ socket.on('move-player', (direction) => {
         username: p.username,
         position: p.position,
         color: p.color
-      }))
+      })),
+      weather: currentWeather
     });
   });
 
@@ -948,6 +974,27 @@ setInterval(() => {
   }
 }, 1000);
 
+// 날씨 업데이트 주기 (5분마다)
+setInterval(async () => {
+  try {
+    const weather = await weatherService.getWeather();
+    const weatherChanged = !currentWeather || currentWeather.condition !== weather.condition;
+    
+    currentWeather = weather;
+    
+    if (weatherChanged) {
+      console.log(`🌤️ 날씨 변경: ${weather.condition} (${weather.description})`);
+      
+      // 모든 방에 날씨 업데이트 브로드캐스트
+      for (const room of gameRooms.values()) {
+        io.to(room.roomId).emit('weather-updated', { weather: weather });
+      }
+    }
+  } catch (error) {
+    console.error('❌ 날씨 업데이트 에러:', error);
+  }
+}, weatherService.updateInterval);
+
 // 유틸 함수들
 
 // 플레이어 연결 해제 처리 함수
@@ -1126,11 +1173,21 @@ async function initializeServer() {
     console.error('❌ 데이터베이스 초기화 실패:', error);
   }
   
+  // 초기 날씨 정보 가져오기
+  try {
+    currentWeather = await weatherService.getWeather();
+    console.log(`🌤️ 초기 날씨 로드: ${currentWeather.condition} (${currentWeather.description})`);
+  } catch (error) {
+    console.error('❌ 초기 날씨 로드 실패:', error);
+    currentWeather = weatherService.getDefaultWeather();
+  }
+  
   console.log('🧹 ================================');
   console.log('🔄 서버 데이터 완전 초기화 완료!');
   console.log('🗑️ 모든 방 삭제됨');
   console.log('👥 모든 플레이어 삭제됨');
   console.log('🏆 게스트 랭킹 초기화됨');
+  console.log('🌤️ 날씨 시스템 준비됨');
   console.log('💾 데이터베이스 준비 완료');
   console.log('🧹 ================================');
 }

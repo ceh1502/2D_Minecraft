@@ -1,0 +1,239 @@
+/* 날씨별 배경 스타일 */
+
+.game-container {
+  transition: all 0.5s ease-in-out;
+}
+
+/* 맑은 날씨 */
+.game-container.weather-sunny {
+  background: linear-gradient(to bottom, #87CEEB 0%, #98D8E8 50%, #B0E0E6 100%);
+}
+
+.game-container.weather-sunny::before {
+  content: '';
+  position: fixed;
+  top: 50px;
+  right: 100px;
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, #FFD700 30%, #FFA500 70%);
+  border-radius: 50%;
+  z-index: -1;
+  animation: sunGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes sunGlow {
+  0% { box-shadow: 0 0 20px #FFD700; }
+  100% { box-shadow: 0 0 40px #FFD700, 0 0 60px #FFA500; }
+}
+
+/* 구름 많은 날씨 */
+.game-container.weather-cloudy {
+  background: linear-gradient(to bottom, #B0C4DE 0%, #D3D3D3 50%, #E6E6FA 100%);
+}
+
+.game-container.weather-cloudy::before {
+  content: '☁️ ☁️ ☁️';
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 40px;
+  z-index: -1;
+  animation: cloudsMove 10s linear infinite;
+}
+
+@keyframes cloudsMove {
+  0% { transform: translateX(-150px); }
+  100% { transform: translateX(150px); }
+}
+
+/* 흐린 날씨 */
+.game-container.weather-overcast {
+  background: linear-gradient(to bottom, #708090 0%, #A9A9A9 50%, #D3D3D3 100%);
+  filter: brightness(0.8);
+}
+
+/* 비 오는 날씨 */
+.game-container.weather-rainy {
+  background: linear-gradient(to bottom, #4F4F4F 0%, #696969 50%, #808080 100%);
+  position: relative;
+}
+
+.game-container.weather-rainy::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(transparent 0%, transparent 40%, rgba(173, 216, 230, 0.6) 41%, transparent 42%),
+    linear-gradient(transparent 0%, transparent 45%, rgba(173, 216, 230, 0.4) 46%, transparent 47%),
+    linear-gradient(transparent 0%, transparent 35%, rgba(173, 216, 230, 0.5) 36%, transparent 37%);
+  background-size: 3px 15px, 5px 20px, 4px 18px;
+  background-position: 0 0, 30px 5px, 60px -5px;
+  animation: rain 0.3s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes rain {
+  0% { background-position: 0 0, 30px 5px, 60px -5px; }
+  100% { background-position: 0 15px, 30px 20px, 60px 13px; }
+}
+
+/* 폭풍 날씨 */
+.game-container.weather-stormy {
+  background: linear-gradient(to bottom, #2F2F2F 0%, #404040 50%, #555555 100%);
+  animation: lightning 2s ease-in-out infinite;
+}
+
+@keyframes lightning {
+  0%, 90%, 100% { filter: brightness(1); }
+  95% { filter: brightness(2) saturate(1.5); }
+}
+
+.game-container.weather-stormy::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(transparent 0%, transparent 40%, rgba(255, 255, 255, 0.8) 41%, transparent 42%),
+    linear-gradient(transparent 0%, transparent 45%, rgba(255, 255, 255, 0.6) 46%, transparent 47%);
+  background-size: 2px 20px, 4px 25px;
+  animation: stormRain 0.2s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes stormRain {
+  0% { background-position: 0 0, 20px 5px; }
+  100% { background-position: 0 20px, 20px 25px; }
+}
+
+/* 눈 오는 날씨 */
+.game-container.weather-snowy {
+  background: linear-gradient(to bottom, #F0F8FF 0%, #E6E6FA 50%, #F5F5F5 100%);
+}
+
+.game-container.weather-snowy::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(circle, white 1px, transparent 1px),
+    radial-gradient(circle, white 1px, transparent 1px),
+    radial-gradient(circle, white 2px, transparent 2px);
+  background-size: 50px 80px, 80px 120px, 120px 160px;
+  background-position: 0 0, 40px 60px, 80px 120px;
+  animation: snow 10s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes snow {
+  0% { background-position: 0 0, 40px 60px, 80px 120px; }
+  100% { background-position: 0 80px, 40px 140px, 80px 280px; }
+}
+
+/* 안개 날씨 */
+.game-container.weather-foggy {
+  background: linear-gradient(to bottom, #DCDCDC 0%, #F5F5F5 50%, #FFFAFA 100%);
+  filter: blur(0.5px) opacity(0.9);
+}
+
+.game-container.weather-foggy::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(220, 220, 220, 0.3);
+  animation: fog 5s ease-in-out infinite alternate;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes fog {
+  0% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}
+
+/* 날씨 정보 표시 */
+.weather-info {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+}
+
+.weather-info:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.weather-icon {
+  font-size: 24px;
+}
+
+.weather-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.weather-condition {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.weather-temp {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.weather-city {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .weather-info {
+    top: 10px;
+    left: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .weather-icon {
+    font-size: 20px;
+  }
+  
+  .weather-condition {
+    font-size: 14px;
+  }
+}
+
+/* 게임 맵에 날씨 효과가 영향을 주지 않도록 */
+.game-map-wrapper {
+  position: relative;
+  z-index: 1;
+}
