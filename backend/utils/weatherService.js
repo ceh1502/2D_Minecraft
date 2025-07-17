@@ -36,10 +36,15 @@ class WeatherService {
       });
 
       const weatherData = this.parseWeatherData(response.data);
+      
+      // 🌧️ 임시로 비로 고정 (테스트용)
+      weatherData.condition = 'rainy';
+      weatherData.description = '비';
+      
       this.currentWeather = weatherData;
       this.lastUpdate = now;
 
-      console.log(`🌤️ 날씨 업데이트: ${city} - ${weatherData.condition} (${weatherData.temp}°C)`);
+      console.log(`🌤️ 날씨 업데이트: ${city} - ${weatherData.condition} (${weatherData.temp}°C) [비로 고정]`);
       return weatherData;
 
     } catch (error) {
@@ -92,14 +97,14 @@ class WeatherService {
   // 기본 날씨 (API 실패 시)
   getDefaultWeather() {
     return {
-      condition: 'sunny',
-      description: '맑음',
+      condition: 'rainy',
+      description: '비',
       temp: 20,
       humidity: 50,
       city: this.defaultCity,
       country: 'KR',
       timestamp: new Date().toISOString(),
-      icon: '01d'
+      icon: '10d'
     };
   }
 
